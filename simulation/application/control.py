@@ -1,4 +1,4 @@
 # -*- coding: utf-8 -*-
 # @Time        : 2022/11/17 17:29
 # @File        : control.py
-# @Description :
+# @Description : 对SUMO运行对象单次控制
