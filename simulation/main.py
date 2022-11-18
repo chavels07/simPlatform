@@ -11,7 +11,7 @@ from collections import OrderedDict
 from typing import List, Dict, Optional
 
 from simulation.lib.common import logger, singleton
-from simulation.lib.sim_data import ImplementTask, InfoTask
+from simulation.lib.sim_data import ImplementTask, InfoTask, NaiveSimInfoStorage, ArterialSimInfoStorage
 from simulation.connection.mqtt import MQTTConnection
 
 
@@ -28,11 +28,12 @@ import traci
 
 @singleton
 class SimCore:
-    def __init__(self, network_fp: str = '../data/network/anting.net.xml'):
+    def __init__(self, network_fp: str = '../data/network/anting.net.xml', arterial_storage: bool = False):
         self._net_fp = network_fp
         self.net = sumolib.net.readNet(network_fp)  # 路网对象化数据
         self.connection = MQTTConnection()  # 通信接口实现数据外部交互
         self.step_limit = None  # 默认限制仿真运行时间, None为无限制
+        self.storage = ArterialSimInfoStorage if arterial_storage else NaiveSimInfoStorage  # 仿真部分数据存储
         self.info_tasks: OrderedDict[int, InfoTask] = OrderedDict()  # TODO:后面还需要实现OD的继承数据结构来保证时间按序排列的
         self.implement_tasks: OrderedDict[int, ImplementTask] = OrderedDict()
 
@@ -77,14 +78,15 @@ class SimCore:
             for effect_time, implement_task in self.implement_tasks.items():
                 if effect_time > current_timestamp:
                     break  # 如果任务需要执行的时间大于当前仿真时间，提前退出
-                success, res = implement_task.execute()
+                success, res = implement_task.execute()  # TODO: 如果控制函数执行后需要在main中修改状态，需要通过返回值传递
 
             # 读取数据
             for effect_time, info_task in self.info_tasks.items():
                 if effect_time > current_timestamp:
                     break  # 如果任务需要执行的时间大于当前仿真时间，提前退出
-                success, res, msg_target_topic = info_task.execute()
-                self.connection.publish(msg_target_topic, res)
+                success, msg_label = info_task.execute()  # 返回结果: 执行是否成功, 需要发送的消息Optional[PubMsgLabel]
+                if msg_label is not None and success:
+                    self.connection.publish(msg_label)
 
             if self.step_limit is not None and current_timestamp > self.step_limit:
                 break  # 完成仿真任务提前终止仿真程序

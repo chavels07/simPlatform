@@ -6,8 +6,9 @@
 import json
 import random
 import threading
+from dataclasses import dataclass
 from queue import Queue
-from typing import Tuple, Iterator, Iterable, Union
+from typing import Tuple, Iterator, Iterable, Union, Any
 
 from paho.mqtt.client import Client, MQTTMessage
 
@@ -20,12 +21,17 @@ fb_converter = FBConverter()  # only used here
 
 class MQTTConnection:
     """仿真直接调用通信类"""
+
     def __init__(self):
         self._state = ClosedMQTTConnection()
 
-    def publish(self, topic, msg):
+    # def _publish(self, topic, msg):
+    #     """向指定topic推送消息，未连接状态则不进行推送"""
+    #     return self._state.publish(topic, msg)
+
+    def publish(self, msg_label: 'PubMsgLabel'):
         """向指定topic推送消息，未连接状态则不进行推送"""
-        return self._state.publish(topic, msg)
+        return self._state.publish(msg_label)
 
     def loading_msg(self):
         """获取当前的所有消息，以遍历形式读取，未连接状态则返回空列表"""
@@ -40,6 +46,36 @@ class MQTTConnection:
             topics: 需要订阅的一系列主题，若为空则订阅所有可用MSG_TYPE中的主题
         """
         self._state = OpenMQTTConnection(broker, port, topics)
+
+
+CONVERT_METHOD = ['json', 'flatbuffers', 'raw']
+
+
+class PubMsgLabel:
+    """任意通过MQTT传输的消息均要通过转换成该类"""
+
+    def __init__(self, raw_msg: Any, msg_type: str, convert_method: str):
+        """
+
+        Args:
+            raw_msg: 消息内容, most likely type: dict
+            msg_type: 消息的类型
+            convert_method: 发送前需要转换成的数据
+
+        """
+        self.raw_msg = raw_msg
+        self.msg_type = msg_type
+        self.convert_method = convert_method
+
+    @property
+    def convert_method(self):
+        return self._convert_method
+
+    @convert_method.setter
+    def convert_method(self, value):
+        if not isinstance(value, str) or value not in CONVERT_METHOD:
+            raise ValueError(f'given convert method is not defined, allowed value: {",".join(CONVERT_METHOD)}')
+        self._convert_method = value
 
 
 class MessageTransfer:
@@ -72,19 +108,25 @@ def on_connect(client, userdata, flags, rc):
         logger.info("Failed to connect, return code %d\n", rc)
 
 
-VALID_TOPIC = {item.topic_name: (short_name, item.fb_code) for short_name, item in MSG_TYPE.items()}
+VALID_TOPIC = {item.topic_name: (short_name, item.fb_code) for short_name, item in MSG_TYPE.items() if
+               item.topic_name.startswith('MECLocal')}  # 选取下发的topic进行订阅
 
 
 def on_message(client, user_data, msg: MQTTMessage):
     short_topic, msg_type_code = VALID_TOPIC.get(msg.topic)
     if short_topic is not None:
         msg_len = msg.payload.find(chr(0))
-        success, json_value = fb_converter.fb2json(msg_type_code, msg.payload[:msg_len])
-        if success == 0:
-            msg_value = json.loads(json_value)
-            MessageTransfer.append(short_topic, msg_value)
-        else:
-            logger.debug(f'json2fb error occurs when receiving message, msg type {short_topic}')
+        msg_value = msg.payload[:msg_len]
+        # type code为None时表示直接传json而不是FB
+        if msg_type_code is not None:
+            success, msg_value = fb_converter.fb2json(msg_type_code, msg_value)
+            if success != 0:
+                logger.warn(f'fb2json error occurs when receiving message, '
+                            f'msg type: {short_topic}, error code: {success}, msg body: {msg_value}')
+                return None
+
+        msg_ = json.loads(msg_value)  # json 转换成 dict
+        MessageTransfer.append(short_topic, msg_)
 
     # # 交通事件主题
     # if msg.topic == 'MECLocal/TrafficEvent':
@@ -122,6 +164,7 @@ class SubClientThread(threading.Thread):
     """
     接收订阅线程
     """
+
     def __init__(self, broker: str, port: int, topics: Union[str, Iterable[str], None]):
         super().__init__()
         self.broker = broker
@@ -131,7 +174,7 @@ class SubClientThread(threading.Thread):
         elif isinstance(topics, str):
             self.topics = topics
         elif isinstance(topics, Iterable):
-            self.topics = ((topic, 0)for topic in topics)
+            self.topics = ((topic, 0) for topic in topics)
         else:
             raise TypeError(f'wrong topics type {type(topics)}')
         self.client = None
@@ -156,6 +199,7 @@ class PubClient:
     """
     发布消息, 使用实例:
     """
+
     def __init__(self, broker, port):
         self.client = self.__connect_pub_mqtt(broker, port)
 
@@ -167,10 +211,30 @@ class PubClient:
         client.connect(broker, port)
         return client
 
-    def publish(self, topic: str, msg: str):
+    def _publish(self, topic: str, msg: str):
         msg_info = self.client.publish(topic, msg.encode(encoding='utf-8'))
         if msg_info.rc != 0:
             logger.info(f'fail to send message to topic {topic}, return code: {msg_info.rc}')
+
+    def publish(self, msg_label: PubMsgLabel):
+        target_topic, fb_code = MSG_TYPE.get(msg_label.msg_type)
+        if msg_label.convert_method == 'flatbuffers':
+            if fb_code is None:
+                raise ValueError(f'no flatbuffers structure for msg type {msg_label.msg_type}')
+            _msg = json.dumps(msg_label.raw_msg)
+            success, _msg = fb_converter.json2fb(fb_code, _msg)
+            if success != 0:
+                logger.warn(f'json2fb error occurs when sending message, '
+                            f'msg type: {msg_label.msg_type}, error code: {success}, msg body: {msg_label.raw_msg}')
+                return None
+        elif msg_label.convert_method == 'json':
+            _msg = json.dumps(msg_label.raw_msg)
+        elif msg_label.convert_method == 'raw':
+            _msg = msg_label.raw_msg
+        else:
+            raise ValueError(f'cannot handle convert type: {msg_label.convert_method}')
+
+        self._publish(_msg, target_topic)
 
 
 class OpenMQTTConnection:
