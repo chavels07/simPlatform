@@ -18,6 +18,30 @@ from simulation.lib.common import logger
 fb_converter = FBConverter()  # only used here
 
 
+class MQTTConnection:
+    """仿真直接调用通信类"""
+    def __init__(self):
+        self._state = ClosedMQTTConnection()
+
+    def publish(self, topic, msg):
+        """向指定topic推送消息，未连接状态则不进行推送"""
+        return self._state.publish(topic, msg)
+
+    def loading_msg(self):
+        """获取当前的所有消息，以遍历形式读取，未连接状态则返回空列表"""
+        return self._state.loading_msg()
+
+    def connect(self, broker: str, port: int, topics: Union[str, Iterable[str], None]):
+        """
+
+        Args:
+            broker: 服务器ip
+            port: 端口号
+            topics: 需要订阅的一系列主题，若为空则订阅所有可用MSG_TYPE中的主题
+        """
+        self._state = OpenMQTTConnection(broker, port, topics)
+
+
 class MessageTransfer:
     __msg_queue = Queue(maxsize=1024)
     __sub_msg_queue = Queue(maxsize=1024)
@@ -31,7 +55,6 @@ class MessageTransfer:
         """
         获取当前的所有消息
         Returns: 生成器:(消息的类型, 内容对应的字典)
-
         """
         pop_msg = cls.__msg_queue
         cls.__msg_queue = cls.__sub_msg_queue
@@ -99,14 +122,7 @@ class SubClientThread(threading.Thread):
     """
     接收订阅线程
     """
-    def __init__(self, broker: str, port: int, topics: Union[str, Iterable[str], None] = None):
-        """
-
-        Args:
-            broker: 服务器ip
-            port: 端口号
-            topics: 需要订阅的一系列主题，若为空则订阅所有可用MSG_TYPE中的主题
-        """
+    def __init__(self, broker: str, port: int, topics: Union[str, Iterable[str], None]):
         super().__init__()
         self.broker = broker
         self.port = port
@@ -118,6 +134,7 @@ class SubClientThread(threading.Thread):
             self.topics = ((topic, 0)for topic in topics)
         else:
             raise TypeError(f'wrong topics type {type(topics)}')
+        self.client = None
 
     def run(self) -> None:
         self.connect_sub_mqtt()
@@ -132,13 +149,12 @@ class SubClientThread(threading.Thread):
         client.connect(self.broker, self.port)
         client.subscribe(topic=self.topics)
         client.loop_forever()
+        self.client = client
 
 
 class PubClient:
     """
     发布消息, 使用实例:
-    >>> pub_client = PubClient('localhost', 8888)
-    >>> pub_client.publish('test', 'any msg')
     """
     def __init__(self, broker, port):
         self.client = self.__connect_pub_mqtt(broker, port)
@@ -155,3 +171,33 @@ class PubClient:
         msg_info = self.client.publish(topic, msg.encode(encoding='utf-8'))
         if msg_info.rc != 0:
             logger.info(f'fail to send message to topic {topic}, return code: {msg_info.rc}')
+
+
+class OpenMQTTConnection:
+    def __init__(self, broker: str, port: int, topics: Union[str, Iterable[str], None]):
+        self.__msg_transfer = MessageTransfer()
+        self.__sub_thread = SubClientThread(broker, port, topics)
+        self.__pub_client = PubClient(broker, port)
+        self.__sub_thread.start()
+
+    def publish(self, topic, msg):
+        """向指定topic推送消息"""
+        self.__pub_client.publish(topic, msg)
+
+    def loading_msg(self):
+        """获取当前的所有消息，以遍历形式读取"""
+        return self.__msg_transfer.loading_msg()
+
+    def closed(self):
+        pass
+
+
+class ClosedMQTTConnection:
+    @staticmethod
+    def publish(*args):
+        logger.info('cannot publish before connecting')
+
+    @staticmethod
+    def loading_msg():
+        logger.info('cannot loading received message before connecting')
+        return []
