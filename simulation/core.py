@@ -9,9 +9,11 @@ import time
 
 from collections import OrderedDict, defaultdict
 from enum import Enum, auto
+from functools import partial
 from typing import List, Dict, Optional, Callable
 
 from simulation.lib.common import logger, singleton
+from simulation.lib.public_data import OrderMsg
 from simulation.lib.sim_data import ImplementTask, InfoTask, EvalTask, NaiveSimInfoStorage, ArterialSimInfoStorage
 from simulation.connection.mqtt import MQTTConnection
 
@@ -73,6 +75,10 @@ class SimCore:
         """通过MQTT通信完成与服务器的连接"""
         self.connection.connect(broker, port, topics)
 
+    def is_connected(self):
+        """通信是否处于连接状态"""
+        return self.connection.status
+
     def run(self, step_len: float = 0):
         """
 
@@ -115,6 +121,8 @@ class SimCore:
 
 
 """测评系统与仿真无关的内容均以事件形式定义(如生成json轨迹文件，发送评分等)，处理事件的函数的入参以关键词参数形式传入，返回值固定为None"""
+
+
 class EvalEventType(Enum):
     START_EVAL = auto()
     ERROR = auto()
@@ -190,9 +198,15 @@ def initialize_score_prepare():
 
 @singleton
 class AlgorithmEval:
-    def __init__(self, cfg_fp: str = '../data/network/anting.sumocfg', network_fp: str = '../data/network/anting.net.xml'):
+    def __init__(self, cfg_fp: str = '../data/network/anting.sumocfg',
+                 network_fp: str = '../data/network/anting.net.xml'):
         self.sim = SimCore(cfg_fp, network_fp, arterial_storage=True)
+        self.testing_name: str = 'No test'
         self.eval_record: Dict[str, dict] = {}
+        self.__eval_start_func: Optional[Callable[[], None]] = None
+
+    def connect(self, broker: str, port: int, topics=None):
+        self.sim.connect(broker, port, topics=topics)
 
     def eval_task_start(self, route_fp: str, detector_fp: Optional[str] = None, step_limit: int = None,
                         step_len: float = 0):
@@ -204,7 +218,7 @@ class AlgorithmEval:
     def auto_initialize_event():
         initialize_score_prepare()
 
-    def eval_task_from_directory(self, sce_dir_fp: str, detector_fp: str, *, f_name_startswith: str = None,
+    def eval_task_from_directory(self, sce_dir_fp: str, detector_fp: Optional[str], *, f_name_startswith: str = None,
                                  step_limit: int = None, step_len: float = 0):
         """
         从文件夹中读取所有流量文件创建评测任务
@@ -224,3 +238,49 @@ class AlgorithmEval:
                 route_fps.append('/'.join((sce_dir_fp, file)))
         for route_fp in route_fps:
             self.eval_task_start(route_fp, detector_fp, step_limit, step_len)
+
+    def eval_mode_setting(self, single_file: bool, *, route_fp: str = None, sce_dir_fp: str = None,
+                          detector_fp: Optional[str] = None, **kwargs) -> None:
+        """
+        调用loop_start前，指定测评时流量文件读取模式
+        Args:
+            single_file: 是否为单个文件
+            route_fp: route文件
+            sce_dir_fp: route文件所在文件夹
+            detector_fp: 检测器文件
+            **kwargs:
+
+        Returns:
+
+        """
+        if single_file:
+            if route_fp is None:
+                raise ValueError('运行单个流量文件时route_fp参数需给定')
+            self.__eval_start_func = partial(self.eval_task_start, route_fp=route_fp, detector_fp=detector_fp)
+        else:
+            if sce_dir_fp is None:
+                raise ValueError('运行文件夹下所有流量文件时sce_dir_fp参数需给定')
+            self.__eval_start_func = partial(self.eval_task_from_directory, sce_dir_fp=sce_dir_fp, detector_fp=detector_fp, **kwargs)
+
+    def loop_start(self, test_name_split: str = ' '):
+        """
+        阻塞形式开始测评，接受start命令后开始运行
+        Args:
+            test_name_split: start指令中提取算法名称的分割字符，取最后一部分为测试的名称
+
+        Returns:
+
+        """
+        sim = self.sim
+        if not sim.is_connected():
+            raise RuntimeError('与服务器处于未连接状态,请先创建连接')
+        while True:
+            recv_msgs = sim.connection.loading_msg(OrderMsg)
+            if recv_msgs is None:
+                continue
+
+            for msg_type, msg_ in recv_msgs:
+                if msg_type is OrderMsg.Start:
+                    self.testing_name = msg_.split(test_name_split)[-1]  # 获取分割后的最后一部分作为测试名称
+                    self.__eval_start_func()
+

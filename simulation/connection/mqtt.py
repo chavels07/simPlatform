@@ -8,25 +8,26 @@ import random
 import threading
 from collections import namedtuple
 from queue import Queue
-from typing import Tuple, Iterator, Iterable, Union, Any
+from typing import Tuple, Iterator, Iterable, Union, Optional, Any, Type
 
 from paho.mqtt.client import Client, MQTTMessage
 
 from simulation.connection.python_fbconv.fbconv import FBConverter
 from simulation.lib.common import logger
+from simulation.lib.public_data import OrderMsg, DataMsg, SpecialDataMsg, DetailMsgType
 
 fb_converter = FBConverter()  # only used here
 
 _MsgProperty = namedtuple('MsgProperty', ['topic_name', 'fb_code'])
-MSG_TYPE = {
+MSG_TYPE_INFO = {
     # 订阅
-    'SignalScheme': _MsgProperty('MECUpload/1/SignalScheme', 0x24),
-    'SpeedGuide': _MsgProperty('MECUpload/1/SpeedGuide', 0x34),
+    DataMsg.SignalScheme: _MsgProperty('MECUpload/1/SignalScheme', 0x24),
+    DataMsg.SpeedGuide: _MsgProperty('MECUpload/1/SpeedGuide', 0x34),
 
     # 自定义数据结构，通过json直接传递，None表示无需转换fb
-    'Start': _MsgProperty('MECUpload/1/Start', None),  # 仿真开始
-    'TransitionSS': _MsgProperty('MECUpload/1/TransitionSignalScheme', None),  # 过渡周期信控方案
-    'SERequirement': _MsgProperty('MECUpload/1/SignalExecutionRequirement', None)  # 请求发送当前执行的信控方案
+    OrderMsg.Start: _MsgProperty('MECUpload/1/Start', None),  # 仿真开始
+    SpecialDataMsg.TransitionSS: _MsgProperty('MECUpload/1/TransitionSignalScheme', None),  # 过渡周期信控方案
+    SpecialDataMsg.SERequirement: _MsgProperty('MECUpload/1/SignalExecutionRequirement', None)  # 请求发送当前执行的信控方案
 
     # 发布
 
@@ -47,9 +48,9 @@ class MQTTConnection:
         """向指定topic推送消息，未连接状态则不进行推送"""
         return self._state.publish(msg_label)
 
-    def loading_msg(self):
+    def loading_msg(self, msg_type: Type[DetailMsgType]):
         """获取当前的所有消息，以遍历形式读取，未连接状态则返回空列表"""
-        return self._state.loading_msg()
+        return self._state.loading_msg(msg_type)
 
     def connect(self, broker: str, port: int, topics: Union[str, Iterable[str], None]):
         """
@@ -61,6 +62,11 @@ class MQTTConnection:
         """
         self._state = OpenMQTTConnection(broker, port, topics)
 
+    @property
+    def status(self):
+        """获取通信连接状态"""
+        return self._state.status
+
 
 CONVERT_METHOD = ['json', 'flatbuffers', 'raw']
 
@@ -68,7 +74,7 @@ CONVERT_METHOD = ['json', 'flatbuffers', 'raw']
 class PubMsgLabel:
     """任意通过MQTT传输的消息均要通过转换成该类"""
 
-    def __init__(self, raw_msg: Any, msg_type: str, convert_method: str):
+    def __init__(self, raw_msg: Any, msg_type: Type[DetailMsgType], convert_method: str):
         """
 
         Args:
@@ -93,26 +99,42 @@ class PubMsgLabel:
 
 
 class MessageTransfer:
-    __msg_queue = Queue(maxsize=1024)
-    __sub_msg_queue = Queue(maxsize=1024)
+    __order_queue = Queue(maxsize=1024)
+    __data_queue = Queue(maxsize=1024)
+    __special_queue = Queue(maxsize=1024)
+    # __msg_queue = Queue(maxsize=1024)
+    # __sub_msg_queue = Queue(maxsize=1024)
 
     @classmethod
-    def append(cls, msg_type: str, msg_payload: dict):
-        cls.__msg_queue.put_nowait((msg_type, msg_payload))
+    def append(cls, msg_type: DetailMsgType, msg_payload: dict):
+        if isinstance(msg_type, DataMsg):
+            cls.__data_queue.put_nowait((msg_type, msg_payload))
+        elif isinstance(msg_type, SpecialDataMsg):
+            cls.__special_queue.put_nowait((msg_type, msg_payload))
+        elif isinstance(msg_type, OrderMsg):
+            cls.__order_queue.put_nowait((msg_type, msg_payload))
+        else:
+            logger.debug('unspecified message type')
 
     @classmethod
-    def loading_msg(cls) -> Iterator[Tuple[str, dict]]:
+    def loading_msg(cls, msg_type: Type[DetailMsgType]) -> Optional[Iterator[Tuple[DetailMsgType, dict]]]:
         """
         获取当前的所有消息
         Returns: 生成器:(消息的类型, 内容对应的字典)
         """
-        pop_msg = cls.__msg_queue
-        cls.__msg_queue = cls.__sub_msg_queue
+        if msg_type == DataMsg:
+            _pop_queue = cls.__data_queue
+        elif msg_type == SpecialDataMsg:
+            _pop_queue = cls.__special_queue
+        elif msg_type == OrderMsg:
+            _pop_queue = cls.__order_queue
+        else:
+            raise TypeError(f'wrong message type: {msg_type}')
+        if _pop_queue.empty():
+            return None
 
-        while not pop_msg.empty():
-            yield pop_msg.get_nowait()
-
-        cls.__sub_msg_queue = pop_msg  # 读完数据后变成替补
+        while not _pop_queue.empty():
+            yield _pop_queue.get_nowait()
 
 
 def on_connect(client, userdata, flags, rc):
@@ -122,8 +144,8 @@ def on_connect(client, userdata, flags, rc):
         logger.info("Failed to connect, return code %d\n", rc)
 
 
-VALID_TOPIC = {item.topic_name: (short_name, item.fb_code) for short_name, item in MSG_TYPE.items() if
-               item.topic_name.startswith('MECLocal')}  # 选取下发的topic进行订阅
+VALID_TOPIC = {item.topic_name: (short_name, item.fb_code) for short_name, item in MSG_TYPE_INFO.items() if
+               item.topic_name.startswith('MECUpload')}  # 选取下发的topic进行订阅
 
 
 def on_message(client, user_data, msg: MQTTMessage):
@@ -136,7 +158,7 @@ def on_message(client, user_data, msg: MQTTMessage):
             success, msg_value = fb_converter.fb2json(msg_type_code, msg_value)
             if success != 0:
                 logger.warn(f'fb2json error occurs when receiving message, '
-                            f'msg type: {short_topic}, error code: {success}, msg body: {msg_value}')
+                            f'msg type: {short_topic.name()}, error code: {success}, msg body: {msg_value}')
                 return None
 
         msg_ = json.loads(msg_value)  # json 转换成 dict
@@ -184,11 +206,11 @@ class SubClientThread(threading.Thread):
         self.broker = broker
         self.port = port
         if topics is None:
-            self.topics = VALID_TOPIC
+            self.topics = [(topic, 0) for topic in VALID_TOPIC.keys()]
         elif isinstance(topics, str):
             self.topics = topics
         elif isinstance(topics, Iterable):
-            self.topics = ((topic, 0) for topic in topics)
+            self.topics = [(topic, 0) for topic in topics]
         else:
             raise TypeError(f'wrong topics type {type(topics)}')
         self.client = None
@@ -231,7 +253,7 @@ class PubClient:
             logger.info(f'fail to send message to topic {topic}, return code: {msg_info.rc}')
 
     def publish(self, msg_label: PubMsgLabel):
-        target_topic, fb_code = MSG_TYPE.get(msg_label.msg_type)
+        target_topic, fb_code = MSG_TYPE_INFO.get(msg_label.msg_type)
         if msg_label.convert_method == 'flatbuffers':
             if fb_code is None:
                 raise ValueError(f'no flatbuffers structure for msg type {msg_label.msg_type}')
@@ -252,6 +274,8 @@ class PubClient:
 
 
 class OpenMQTTConnection:
+    status = True
+
     def __init__(self, broker: str, port: int, topics: Union[str, Iterable[str], None]):
         self.__msg_transfer = MessageTransfer()
         self.__sub_thread = SubClientThread(broker, port, topics)
@@ -262,20 +286,22 @@ class OpenMQTTConnection:
         """向指定topic推送消息"""
         self.__pub_client.publish(topic, msg)
 
-    def loading_msg(self):
+    def loading_msg(self, msg_type: Type[DetailMsgType]):
         """获取当前的所有消息，以遍历形式读取"""
-        return self.__msg_transfer.loading_msg()
+        return self.__msg_transfer.loading_msg(msg_type)
 
     def closed(self):
         pass
 
 
 class ClosedMQTTConnection:
+    status = False
+
     @staticmethod
     def publish(*args):
         logger.info('cannot publish before connecting')
 
     @staticmethod
-    def loading_msg():
+    def loading_msg(msg_type: Type[DetailMsgType]):
         logger.info('cannot loading received message before connecting')
         return []
