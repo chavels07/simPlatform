@@ -66,3 +66,7 @@ class Flow:
             for detector in detector_list:
                 self.update_vehicle_set(detector)
         return wrapper
+
+    def clear(self):
+        """清除检测器的流量记录"""
+        self.flow_counter.clear()

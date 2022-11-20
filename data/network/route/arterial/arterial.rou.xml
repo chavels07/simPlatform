@@ -1,0 +1,31 @@
+<routes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/routes_file.xsd">
+	<vType accel="0.8" decel="4.5" id="Normal" laneChangeModel="SL2015" lcKeepRight="0" lcLookaheadLeft="100" lcMaxSpeedLatStanding="0" lcStrategic="100" length="5" maxSpeed="45" sigma="0.5" lcPushy="0.5" lcImpatience="0.5"/>
+    <route id="route1" edges="genE480 genE484 genE472 genE475"/>
+    <route id="route2" edges="genE480 genE484 genE472 genE469"/>
+    <route id="route3" edges="genE480 genE484 genE472 genE473"/>
+    <route id="route4" edges="genE480 genE483"/>
+    <route id="route5" edges="genE480 genE476"/>
+    <route id="route6" edges="genE463.629 genE471 -102075 genE485 genE479"/>
+    <route id="route7" edges="genE463.629 genE471 -102075 genE485 genE483"/>
+    <route id="route8" edges="genE463.629 genE471 -102075 genE485 genE477"/>
+    <route id="route9" edges="genE463.629 genE469"/>
+    <route id="route10" edges="genE463.629 genE473"/>
+    <route id="route11" edges="genE469 genE474"/>
+    <route id="route12" edges="genE473 genE470"/>
+    <route id="route13" edges="genE477 genE482"/>
+    <route id="route14" edges="genE483 genE476"/>
+    <flow id="flow1" from="genE480" to="genE475" begin="0" vehsPerHour="800" type="Normal"/>
+    <flow id="flow2" from="genE480" to="genE469" begin="0" vehsPerHour="200" type="Normal"/>
+    <flow id="flow3" from="genE480" to="genE473" begin="0" vehsPerHour="180" type="Normal"/>
+    <flow id="flow4" from="genE480" to="genE483" begin="0" vehsPerHour="150" type="Normal"/>
+    <flow id="flow5" from="genE480" to="genE476" begin="0" vehsPerHour="200" type="Normal"/>
+    <flow id="flow6" from="genE463.629" to="genE479" begin="0" vehsPerHour="950" type="Normal"/>
+    <flow id="flow7" from="genE463.629" to="genE483" begin="0" vehsPerHour="200" type="Normal"/>
+    <flow id="flow8" from="genE463.629" to="genE477" begin="0" vehsPerHour="150" type="Normal"/>
+    <flow id="flow9" from="genE463.629" to="genE469" begin="0" vehsPerHour="100" type="Normal"/>
+    <flow id="flow10" from="genE463.629" to="genE473" begin="0" vehsPerHour="130" type="Normal"/>
+    <flow id="flow11" from="genE469" to="genE474" begin="0" vehsPerHour="200" type="Normal"/>
+    <flow id="flow12" from="genE473" to="genE470" begin="0" vehsPerHour="180" type="Normal"/>
+    <flow id="flow13" from="genE477" to="genE482" begin="0" vehsPerHour="140" type="Normal"/>
+    <flow id="flow14" from="genE483" to="genE476" begin="0" vehsPerHour="200" type="Normal"/>
+</routes>

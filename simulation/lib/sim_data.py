@@ -12,21 +12,6 @@ from typing import Tuple, Dict, Callable, Any, Optional, TypeVar, NewType
 from simulation.information.traffic import Flow
 from simulation.connection.mqtt import PubMsgLabel
 
-_MsgProperty = namedtuple('MsgProperty', ['topic_name', 'fb_code'])
-MSG_TYPE = {
-    # 订阅
-    'SignalScheme': _MsgProperty('MECUpload/1/SignalScheme', 0x24),
-    'SpeedGuide': _MsgProperty('MECUpload/1/SpeedGuide', 0x34),
-
-    # 自定义数据结构，通过json直接传递，None表示无需转换fb
-    'Start': _MsgProperty('MECUpload/1/Start', None),  # 仿真开始
-    'TransitionSS': _MsgProperty('MECUpload/1/TransitionSignalScheme', None),  # 过渡周期信控方案
-    'SERequirement': _MsgProperty('MECUpload/1/SignalExecutionRequirement', None)  # 请求发送当前执行的信控方案
-
-    # 发布
-
-}
-
 # IntersectionId = NewType('IntersectionId', str)
 
 # TODO: 可以对Task进行任意修改，现版本随便写写的
@@ -74,6 +59,10 @@ class InfoTask(BaseTask):
         return success, res
 
 
+class EvalTask(BaseTask):
+    pass
+
+
 @dataclass
 class TransitionIntersection:
     intersection_id: str
@@ -86,10 +75,19 @@ class NaiveSimInfoStorage:
         self.flow_status = Flow()  # 流量信息存储
         self.signal_update_plan = ...  # 信号转换计划
 
+    def reset(self):
+        """清空当前保存的运行数据"""
+        self.flow_status.clear()
+
 
 class ArterialSimInfoStorage(NaiveSimInfoStorage):
-    """新增干线工嗯呢该的运行数据存储"""
+    """新增干线的运行数据存储"""
     def __init__(self):
         super().__init__()
         self.transition_status: Dict[str, TransitionIntersection] = {}
+
+    def reset(self):
+        """清空当前保存的运行数据"""
+        super().reset()
+        self.transition_status.clear()
 

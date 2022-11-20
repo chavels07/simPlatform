@@ -6,17 +6,31 @@
 import json
 import random
 import threading
-from dataclasses import dataclass
+from collections import namedtuple
 from queue import Queue
 from typing import Tuple, Iterator, Iterable, Union, Any
 
 from paho.mqtt.client import Client, MQTTMessage
 
 from simulation.connection.python_fbconv.fbconv import FBConverter
-from simulation.lib.sim_data import MSG_TYPE
 from simulation.lib.common import logger
 
 fb_converter = FBConverter()  # only used here
+
+_MsgProperty = namedtuple('MsgProperty', ['topic_name', 'fb_code'])
+MSG_TYPE = {
+    # 订阅
+    'SignalScheme': _MsgProperty('MECUpload/1/SignalScheme', 0x24),
+    'SpeedGuide': _MsgProperty('MECUpload/1/SpeedGuide', 0x34),
+
+    # 自定义数据结构，通过json直接传递，None表示无需转换fb
+    'Start': _MsgProperty('MECUpload/1/Start', None),  # 仿真开始
+    'TransitionSS': _MsgProperty('MECUpload/1/TransitionSignalScheme', None),  # 过渡周期信控方案
+    'SERequirement': _MsgProperty('MECUpload/1/SignalExecutionRequirement', None)  # 请求发送当前执行的信控方案
+
+    # 发布
+
+}
 
 
 class MQTTConnection:
