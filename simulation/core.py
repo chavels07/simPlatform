@@ -42,7 +42,7 @@ class SimCore:
         """
         self._cfg_fp = sumo_cfg_fp
         self._net_fp = network_fp
-        self.net = sumolib.net.readNet(network_fp)  # 路网对象化数据
+        self.net = sumolib.net.readNet(network_fp, withLatestPrograms =True)  # 路网对象化数据
         self.connection = MQTTConnection()  # 通信接口实现数据外部交互
         self.step_limit = None  # 默认限制仿真运行时间, None为无限制
         self.storage = ArterialSimInfoStorage() if arterial_storage else NaiveSimInfoStorage()  # 仿真部分数据存储
