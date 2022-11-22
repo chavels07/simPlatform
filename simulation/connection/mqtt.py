@@ -214,6 +214,7 @@ class SubClientThread(threading.Thread):
         else:
             raise TypeError(f'wrong topics type {type(topics)}')
         self.client = None
+        self.daemon = True
 
     def run(self) -> None:
         self.connect_sub_mqtt()
