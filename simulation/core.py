@@ -45,7 +45,7 @@ class SimCore:
         self.net = sumolib.net.readNet(network_fp, withLatestPrograms =True)  # 路网对象化数据
         self.connection = MQTTConnection()  # 通信接口实现数据外部交互
         self.step_limit = None  # 默认限制仿真运行时间, None为无限制
-        self.storage = ArterialSimInfoStorage() if arterial_storage else NaiveSimInfoStorage()  # 仿真部分数据存储
+        self.storage = ArterialSimInfoStorage(self.net) if arterial_storage else NaiveSimInfoStorage(self.net)  # 仿真部分数据存储
         self.info_tasks: OrderedDict[int, InfoTask] = OrderedDict()  # TODO:后面还需要实现OD的继承数据结构来保证时间按序排列的
         self.implement_tasks: OrderedDict[int, ImplementTask] = OrderedDict()
 
@@ -94,6 +94,7 @@ class SimCore:
 
             current_timestamp = traci.simulation.getTime()
 
+            # 任务池处理
             # 控制下发
             for effect_time, implement_task in self.implement_tasks.items():
                 if effect_time > current_timestamp:
@@ -110,6 +111,8 @@ class SimCore:
 
             if self.step_limit is not None and current_timestamp > self.step_limit:
                 break  # 完成仿真任务提前终止仿真程序
+
+        logger.info('仿真结束')
         self._reset()
 
     def _reset(self):
@@ -213,6 +216,8 @@ class AlgorithmEval:
         self.sim.initialize(route_fp, detector_fp, step_limit)
         self.sim.run(step_len)
         emit_eval_event(EvalEventType.FINISH_TASK, sim_core=self.sim, eval_record=self.eval_record)
+
+        traci.close()
 
     @staticmethod
     def auto_initialize_event():

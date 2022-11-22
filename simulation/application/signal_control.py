@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 # @Time        : 2022/11/17 17:29
-# @File        : control.py
+# @File        : signal_control.py
 # @Description : 对SUMO运行对象单次控制
 
 from collections import namedtuple
 from enum import Enum
 from itertools import islice
-from typing import Tuple, List, Dict
+from typing import Tuple, List, Dict, Optional
 
 import sumolib
 import traci
@@ -20,9 +20,7 @@ from simulation.lib.public_data import (create_Phasic, create_SignalScheme, crea
 class TLStatus(Enum):
     RED = 'r'
     YELLOW = 'y'
-    YELLOW = 'Y'
     GREEN = 'g'
-    GREEN = 'G'
 
     def lower_name(self):
         return self.name.lower()
@@ -157,7 +155,7 @@ ConnInfo = namedtuple('ConnInfo', ['turn', 'from_edge'])
 class SignalController:
     _net = None
 
-    def __init__(self, ints_id: str, sim_instance: ...):
+    def __init__(self, ints_id: str):
         self.ints_id = ints_id
         self.tls_id, self.conn_info = self.__ints_tl_mapping_from_connection()  # traffic light id, 交叉口内部连接转向，进口道信息
         # self.tls_controller: sumolib.net.TLS = self._net.getTLS(self.tls_id)
@@ -251,7 +249,15 @@ class SignalController:
 
         return next_start_time
 
-    def create_control_task(self, signal_scheme: dict):
+    def create_control_task(self, signal_scheme: dict) -> Optional[traci.trafficlight.Logic]:
+        """
+        创建更新信号配时方案任务
+        Args:
+            signal_scheme: 信号配时数据
+
+        Returns: 执行方案任务，None表示无任务生成
+
+        """
         phases: List[dict] = signal_scheme.get('phases')
         if phases is None or not len(phases):
             logger.info('invalid signal scheme without phases argument, cannot create control')
@@ -259,24 +265,46 @@ class SignalController:
 
         updated_phases_list = []
         phases.sort(key=lambda x: x['order'] if 'order' in x else 0)  # 按order排序，若无order则不变排序
-        for phase in phases:
-            movements = phase.get('movements')
-            green = phase.get('green')
-            yellow = phase.get('yellow')
-            if green is None or yellow is None:
-                logger.info('green or yellow argument missed, cannot create control')
-                return None
-            # movements字段为空时，直接使用当前connection控制组合
-            if movements is None:
-                pass
-            else:
+        has_movements = all('movements' in phase for phase in phases)  # 判断是否存在movements字段，否则在当前相位相序和流向基础上更新参数
+        if not has_movements:
+            current_logic = self.get_current_logic()
+            phase_len = len(phases)
+            phase_light_spilt_len = len(current_logic.getPhases())  # SUMO内划分了灯色的相位
+            if phase_light_spilt_len % phase_len != 0:
+                logger.info('phase count does not match current traffic light,  cannot create control')
+                return None  # SUMO中相位数无法被signalscheme相位数整除，则不能实现分配
+            light_count_per_phase = phase_light_spilt_len // phase_len
+            light_display_order = ['green', 'yellow', 'allred']
+
+            for phase_index, phase in enumerate(phases):
+                green = phase.get('green')
+                yellow = phase.get('yellow')
+                if green is None or yellow is None:
+                    logger.info('green or yellow argument missed, cannot create control')
+                    return None
+
+                # movements字段为空时，直接使用当前connection控制组合
+                for light_index in range(light_count_per_phase):
+                    phase_light_spilt_index = phase_index * light_count_per_phase + light_index
+                    duration = getattr(phase, light_display_order[light_index], 0)  # 按灯色依次读取时间
+                    this_phase = current_logic.getPhases()[phase_light_spilt_index]
+                    this_phase.duration = duration
+            return current_logic
+        else:
+            for phase in phases:
+                movements = phase.get('movements')
+                green = phase.get('green')
+                yellow = phase.get('yellow')
+                if green is None or yellow is None:
+                    logger.info('green or yellow argument missed, cannot create control')
+                    return None
                 movement_indexes = []
                 for movement in movements:
                     if not movement.isnumeric() or int(movement) not in self.conn_info:
                         logger.info(f'movement {movement} is not defined in intersection {self.ints_id}')
 
                     movement_indexes.append(int(movement))
-                # TODO: 检查link index 开始命名编号
+                # TODO: 检查link index 开始命名编号是0还是1
                 green_state = ''.join(
                     TLStatus.GREEN.name if index in movement_indexes else TLStatus.RED.name for index in
                     range(len(self.conn_info)))
@@ -284,16 +312,15 @@ class SignalController:
                     TLStatus.YELLOW.name if index in movement_indexes else TLStatus.RED.name for index in
                     range(len(self.conn_info)))
 
+                updated_phases_list.append(traci.trafficlight.Phase(green, green_state))
+                updated_phases_list.append(traci.trafficlight.Phase(yellow, yellow_state))
+                all_red = phase.get('allred')
+                if all_red:
+                    all_red_state = 'r' * len(self.conn_info)
+                    updated_phases_list.append(traci.trafficlight.Phase(all_red, all_red_state))
 
-            updated_phases_list.append(traci.trafficlight.Phase(green, green_state))
-            updated_phases_list.append(traci.trafficlight.Phase(yellow, yellow_state))
-            all_red = phase.get('allred')
-            if all_red:
-                all_red_state = 'r' * len(self.conn_info)
-                updated_phases_list.append(traci.trafficlight.Phase(all_red, all_red_state))
-
-        new_program_id = traci.trafficlight.getProgram(self.tls_id) + 1
-        updated_logic = traci.trafficlight.Logic(new_program_id, 1, 0, phases=updated_phases_list)
-
-
-
+            new_program_id = traci.trafficlight.getProgram(self.tls_id) + 1
+            updated_logic = traci.trafficlight.Logic(new_program_id, 1, 0, phases=updated_phases_list)
+            return updated_logic
+        # exec_time = self.get_next_cycle_start()
+        # ImplementTask(traci.trafficlight.setProgramLogic, args=(self.tls_id, updated_logic), exec_time=exec_time)

@@ -134,6 +134,7 @@ def create_DateTimeFilter(last_hour: int = 1) -> dict:
 point_numeric_pat = re.compile(r'point(\d+)')
 minus_numeric_pat = re.compile(r'-(\d+)')
 
+
 def signalized_intersection_name_decimal(ints: str) -> int:
     """
     从交叉口名称字符串提取数字部分
@@ -152,4 +153,13 @@ def signalized_intersection_name_decimal(ints: str) -> int:
     return int(ints_num)
 
 
+def signalized_intersection_name_str(ints: int) -> str:
+    """
+     从交叉口的数字标号寻找对应的名称字符串
+    Args:
+        ints: 交叉口编号
 
+    Returns: 交叉口名称
+
+    """
+    pass
