@@ -74,18 +74,20 @@ CONVERT_METHOD = ['json', 'flatbuffers', 'raw']
 class PubMsgLabel:
     """任意通过MQTT传输的消息均要通过转换成该类"""
 
-    def __init__(self, raw_msg: Any, msg_type: Type[DetailMsgType], convert_method: str):
+    def __init__(self, raw_msg: Any, msg_type: DetailMsgType, convert_method: str, multiple: bool = False):
         """
 
         Args:
             raw_msg: 消息内容, most likely type: dict
             msg_type: 消息的类型
             convert_method: 发送前需要转换成的数据
+            multiple: 消息是否为可迭代的多条消息，当有多条消息需要发送时raw_msg为list需要设为true
 
         """
         self.raw_msg = raw_msg
         self.msg_type = msg_type
         self.convert_method = convert_method
+        self.multiple = multiple
 
     @property
     def convert_method(self):

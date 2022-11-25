@@ -14,6 +14,7 @@ import traci
 from simulation.lib.common import logger
 from simulation.lib.public_data import signalized_intersection_name_str
 from simulation.information.traffic import Flow
+from simulation.information.participants import safety_message_pub_msg
 from simulation.application.signal_control import SignalController
 from simulation.connection.mqtt import PubMsgLabel
 
@@ -122,6 +123,20 @@ class NaiveSimInfoStorage:
             return None
         exec_time = sc.get_next_cycle_start()
         return ImplementTask(traci.trafficlight.setProgramLogic, args=(sc.tls_id, updated_logic), exec_time=exec_time)
+
+    # TODO: create_xxx函数是否可以移到外部
+    @staticmethod
+    def create_safety_message_info_task(target_topic: str = None, region: set = None):
+        """
+        创建获取车辆安全消息任务
+        Args:
+            target_topic: 发送的目标topic
+            region: 所选的交叉口范围
+
+        Returns:
+
+        """
+        return InfoTask(safety_message_pub_msg, args=(region,), target_topic=target_topic)  # 等待core执行传入的函数，并发送到topic
 
     def reset(self):
         """清空当前保存的运行数据"""

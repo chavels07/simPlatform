@@ -7,5 +7,5 @@ Python >= 3.7
 2. 添加.idea/.vscode此类IDE或编辑器生成的项目配置文件到.gitignore中，避免上传冗余文件
 
 #### 代码要求
-1. 外部调用的接口需要Type hint
+1. 外部调用的接口需要Type hint，为了兼容3.7版本Python，请使用Typing库中的List, Dict, Tuple而非原生数据结构list, dict, tuple，注解示例`x: List[int]`(√, python>=3.7)   `x:list[int]`(×, python>=3.8)
 2. 注释风格建议使用Google，也可以使用reStructuredText，在外部模块调用的函数需要提供注释

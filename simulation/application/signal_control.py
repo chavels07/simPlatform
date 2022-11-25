@@ -103,8 +103,9 @@ def get_tl_status(state: str) -> TLStatus:
         return TLStatus.UNKNOWN
 
 
-def get_movement_from_state(state: str) -> List[int]:
-    pass
+def get_related_movement_from_state(state: str) -> List[int]:
+    """根据sumo中相位的信号状态判断相位对应控制的流向"""
+    return [i for i, light in enumerate(state) if light.lower() != 'r']
 
 
 def get_phase_status(state: str) -> TLStatus:
@@ -117,11 +118,11 @@ def get_phase_status(state: str) -> TLStatus:
         return TLStatus.RED
 
 
-def phase_gather(phases: List[traci.trafficlight.Phase]) -> List[EasyPhaseTiming]:
+def phase_gather(phases: List[traci.trafficlight.Phase]) -> Tuple[List[EasyPhaseTiming], List[List[int]]]:
     """根据sumo中相位信息转换成按控制车流的相位划分形式"""
     gather_res = []
-    green_flag = False
     index_ptr = None
+    state_strings = []
     for phase in phases:
         status = get_phase_status(phase.state)  # 表示各junctionlink的信号放行状态
         if index_ptr is None:
@@ -131,12 +132,13 @@ def phase_gather(phases: List[traci.trafficlight.Phase]) -> List[EasyPhaseTiming
         if status is TLStatus.GREEN:
             gather_res.append(EasyPhaseTiming(green=phase.duration))
             index_ptr += 1  # 出现绿灯时新增一个相位，指针后移一位
+            state_strings.append(get_related_movement_from_state(phase.state))  # 保存放行的信号控制机的关联状态
         elif status is TLStatus.YELLOW:
             gather_res[index_ptr].yellow = phase.duration
         elif status is TLStatus.RED:
             gather_res[index_ptr].allred = phase.duration
 
-    # 对于绿灯不是作为phases list首位的情况进行合并处理
+    # 对于绿灯不是作为phases list首位的情况进行合并处理, 将最先相序的黄灯或全红移动到最后相序的绿灯中
     if not gather_res[0].green_yellow_completed():
         first_item = gather_res.pop(0)
         last_item = gather_res[-1]
@@ -146,7 +148,7 @@ def phase_gather(phases: List[traci.trafficlight.Phase]) -> List[EasyPhaseTiming
                 f'not complete signal timing, cannot integrate together, this: {last_item}, other: {first_item}')
 
     # 没有all red的情况进行填充
-    return [item.all_red_complete() for item in gather_res]
+    return [item.all_red_complete() for item in gather_res], state_strings
 
 
 ConnInfo = namedtuple('ConnInfo', ['turn', 'from_edge'])
@@ -186,14 +188,17 @@ class SignalController:
         current_program_id = traci.trafficlight.getProgram(self.tls_id)
         curr_logic = self.get_current_logic()
         local_phases: List[traci.trafficlight.Phase] = curr_logic.getPhases()
-        gather_phases = phase_gather(local_phases)  # 按照相位传统定义(车流控制)从SUMO中的相位中进行集合转换处理
+        gather_phases, movements = phase_gather(local_phases)  # 按照相位传统定义(车流控制)从SUMO中的相位中进行集合转换处理
+        assert len(gather_phases) == len(movements), \
+            f'phase count is not equivalent to movement group count in intersection {self.ints_id}'
+
         phases = []
         cycle_length = 0
-        for index, timing in enumerate(gather_phases, start=1):
+        for index, (timing, mov) in enumerate(zip(gather_phases, movements), start=1):
             phasic_res = create_Phasic(phase_id=index,
                                        order=index,
                                        scat_no='',
-                                       movements=...,
+                                       movements=[str(item) for item in mov],
                                        green=timing.green,
                                        yellow=timing.yellow,
                                        all_red=timing.allred,

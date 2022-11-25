@@ -24,6 +24,7 @@ class DataMsg(MsgType):
     # 标准数据结构
     SignalScheme = auto()
     SpeedGuide = auto()
+    SafetyMessage = auto()
 
 
 class SpecialDataMsg(MsgType):
@@ -128,6 +129,21 @@ def create_DateTimeFilter(last_hour: int = 1) -> dict:
         'to_time_point': to_time
     }
     return _DateTimeFilter
+
+
+def create_SafetyMessage(ptcType: int,
+                         ptcId: int,
+                         moy: int,
+                         secMark: int):
+
+    _SafetyMessage = {
+        'ptcType': ptcType,
+        'ptcId': ptcId,
+        'source': 1,
+        'device': [1],
+
+    }
+    return _SafetyMessage
 
 
 """常用方法"""
