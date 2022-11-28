@@ -6,6 +6,8 @@
 import os
 import sys
 import time
+import json
+import subprocess
 
 from collections import OrderedDict, defaultdict
 from enum import Enum, auto
@@ -95,6 +97,10 @@ class SimCore:
             current_timestamp = traci.simulation.getTime()
 
             # 任务池处理
+
+            # pop a task at current time
+
+
             # 控制下发
             for effect_time, implement_task in self.implement_tasks.items():
                 if effect_time > current_timestamp:
@@ -162,7 +168,15 @@ def emit_eval_event(event: EvalEventType, *args, **kwargs):
 
 def handle_trajectory_record_event(*args, **kwargs) -> None:
     """以json文件形式保存轨迹"""
-    pass
+    veh_info = {}
+    # TODO: get vehicle info
+
+    veh_info_json = json.dumps(veh_info, indent=2)
+    filename = kwargs.get("name")
+    traj_file_path = kwargs.get("traj_file_path")
+    with open(traj_file_path + filename + ".json", "w+") as f:
+        f.write(veh_info_json)
+
 
 
 def handle_eval_apply_event(*args, **kwargs) -> None:
@@ -175,16 +189,24 @@ def handle_eval_apply_event(*args, **kwargs) -> None:
     Returns:
 
     """
-    eval_record = getattr(kwargs, 'eval_record', None)
-    eval_name = getattr(kwargs, 'eval_name', None)
-    if eval_record is None:
+    eval_record_dir = kwargs.get('eval_record_path') # ../data/evaluation/
+    eval_name = kwargs.get('eval_name')
+    eval_exe_path = kwargs.get('eval_exe_path') # ../bin/main.exe
+    if eval_record_dir is None:
         raise EventArgumentError('apply score event handling requires key-only argument "eval_record"')
     if eval_name is None:
         raise EventArgumentError('apply score event handling requires key-only argument "eval_name"')
 
     # 运行测评程序得到eval res
-    eval_res = {'score': 100}
-    eval_record[eval_name] = eval_res
+    eval_cmd = [eval_exe_path, eval_name + ".json"]
+    process = subprocess.Popen(eval_cmd)
+    exit_code = process.wait()
+    # 仅在评测异常时由主程序写入结果，否则由评测程序写入
+    if exit_code != 0:
+        eval_res = {'score': 0, 'detail': 'evaluation faliure'}
+        eval_res_json = json.dumps(eval_res, indent=2)
+        with open(eval_record_dir + eval_name + ".json", 'w+') as f:
+            f.write(eval_res_json)
 
 
 def handle_score_report_event(*args, **kwargs) -> None:
@@ -195,7 +217,7 @@ def handle_score_report_event(*args, **kwargs) -> None:
 def initialize_score_prepare():
     """注册评分相关的事件"""
     subscribe_eval_event(EvalEventType.FINISH_TASK, handle_trajectory_record_event)
-    subscribe_eval_event(EvalEventType.FINISH_TASK, handle_eval_apply_event)
+    subscribe_eval_event(EvalEventType.START_EVAL, handle_eval_apply_event)
     subscribe_eval_event(EvalEventType.FINISH_EVAL, handle_score_report_event)
 
 
@@ -211,13 +233,17 @@ class AlgorithmEval:
     def connect(self, broker: str, port: int, topics=None):
         self.sim.connect(broker, port, topics=topics)
 
-    def eval_task_start(self, route_fp: str, detector_fp: Optional[str] = None, step_limit: int = None,
+    def sim_task_start(self, route_fp: str, detector_fp: Optional[str] = None, step_limit: int = None,
                         step_len: float = 0):
         self.sim.initialize(route_fp, detector_fp, step_limit)
         self.sim.run(step_len)
         emit_eval_event(EvalEventType.FINISH_TASK, sim_core=self.sim, eval_record=self.eval_record)
 
         traci.close()
+
+    def eval_task_start(*args, **kwargs):
+        emit_eval_event(EvalEventType.START_EVAL, *args, **kwargs)
+        emit_eval_event(EvalEventType.FINISH_EVAL, *args, **kwargs)
 
     @staticmethod
     def auto_initialize_event():
@@ -242,7 +268,7 @@ class AlgorithmEval:
             if f_name_startswith is None or file.startswith(f_name_startswith):
                 route_fps.append('/'.join((sce_dir_fp, file)))
         for route_fp in route_fps:
-            self.eval_task_start(route_fp, detector_fp, step_limit, step_len)
+            self.sim_task_start(route_fp, detector_fp, step_limit, step_len)
 
     def eval_mode_setting(self, single_file: bool, *, route_fp: str = None, sce_dir_fp: str = None,
                           detector_fp: Optional[str] = None, **kwargs) -> None:
@@ -261,7 +287,7 @@ class AlgorithmEval:
         if single_file:
             if route_fp is None:
                 raise ValueError('运行单个流量文件时route_fp参数需给定')
-            self.__eval_start_func = partial(self.eval_task_start, route_fp=route_fp, detector_fp=detector_fp)
+            self.__eval_start_func = partial(self.sim_task_start, route_fp=route_fp, detector_fp=detector_fp)
         else:
             if sce_dir_fp is None:
                 raise ValueError('运行文件夹下所有流量文件时sce_dir_fp参数需给定')
