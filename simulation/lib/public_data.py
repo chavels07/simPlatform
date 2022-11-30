@@ -4,40 +4,72 @@
 # @Description : 存放不仅用于仿真内部，也可用在其他环节所需的数据结构
 
 import re
-from enum import Enum, auto
 from datetime import datetime
-from typing import List, TypeVar
+from typing import Tuple, List, TypeVar, Callable, Any, Optional
 
 from simulation.lib.common import alltypeassert
 
 
-class MsgType(Enum):
-    pass
-
-
-class OrderMsg(MsgType):
-    # 控制命令
-    Start = auto()
-
-
-class DataMsg(MsgType):
-    # 标准数据结构
-    SignalScheme = auto()
-    SpeedGuide = auto()
-    SafetyMessage = auto()
-
-
-class SpecialDataMsg(MsgType):
-    # 仿真专用数据结构
-    TransitionSS = auto()
-    SERequirement = auto()
-    ScoreReport = auto()
-
-
-DetailMsgType = TypeVar('DetailMsgType', bound=MsgType)  # MsgType的所有子类，用于类型注解
-
 """标准数据结构中默认的常量"""
 REGION = 1
+
+
+"""任务类型"""
+# TODO: 可以对Task进行任意修改，现版本随便写写的
+
+
+class BaseTask:
+    """
+    仿真中需要执行的任务
+    """
+    def __init__(self, exec_func: Callable, args: tuple = (), kwargs: dict = None, exec_time: Optional[float] = None):
+        """
+
+        Args:
+            exec_func: 执行的函数
+            exec_time: 达到此时间才在仿真中执行函数，None表示立即执行
+            args: position 参数
+            kwargs: keyword 参数
+        """
+        self.exec_func = exec_func
+        self.args = args
+        self.kwargs = kwargs if kwargs is not None else {}
+        self.exec_time = exec_time
+
+    def execute(self):
+        return self.exec_func(*self.args, **self.kwargs)
+
+
+class ImplementTask(BaseTask):
+    """在仿真中进行控制命令的任务"""
+    def execute(self) -> Tuple[bool, Any]:
+        """
+
+        Returns: 函数提取后的结果
+
+        """
+        success, res = super().execute()
+        return success, res
+
+
+class InfoTask(BaseTask):
+    """在仿真中获取信息的任务"""
+    def __init__(self, exec_func: Callable, args=(), kwargs=None, exec_time=None, target_topic: str = None):
+        super().__init__(exec_func, args=args, kwargs=kwargs, exec_time= exec_time)
+        self.target_topic = target_topic  # 如果需要发送信息，确定发送的topic
+
+    def execute(self) -> Tuple[bool, Optional['PubMsgLabel']]:
+        """
+
+        Returns: 函数提取后的结果
+
+        """
+        success, res = super().execute()
+        return success, res
+
+
+class EvalTask(BaseTask):
+    pass
 
 
 """标准数据格式构造"""

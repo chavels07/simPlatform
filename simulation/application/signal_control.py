@@ -13,8 +13,7 @@ import traci
 
 from simulation.lib.common import logger
 from simulation.lib.public_data import (create_Phasic, create_SignalScheme, create_NodeReferenceID,
-                                        create_DateTimeFilter,
-                                        signalized_intersection_name_decimal)
+                                        create_DateTimeFilter, signalized_intersection_name_decimal)
 
 
 class TLStatus(Enum):

@@ -8,13 +8,13 @@ import random
 import threading
 from collections import namedtuple
 from queue import Queue
-from typing import Tuple, Iterator, Iterable, Union, Optional, Any, Type
+from typing import Tuple, Dict, Iterator, Iterable, Union, Optional, Any, Type, Callable
 
 from paho.mqtt.client import Client, MQTTMessage
 
 from simulation.connection.python_fbconv.fbconv import FBConverter
 from simulation.lib.common import logger
-from simulation.lib.public_data import OrderMsg, DataMsg, SpecialDataMsg, DetailMsgType
+from simulation.lib.public_conn_data import OrderMsg, DataMsg, SpecialDataMsg, DetailMsgType, PubMsgLabel
 
 fb_converter = FBConverter()  # only used here
 
@@ -33,12 +33,17 @@ MSG_TYPE_INFO = {
 
 }
 
+MsgInfo = Union[dict, str]  # 从通信获取的message类型为dict or str
+
 
 class MQTTConnection:
     """仿真直接调用通信类"""
 
     def __init__(self):
-        self._state = ClosedMQTTConnection()
+        self.state = False
+        self.__msg_transfer = MessageTransfer()
+        self.__sub_thread = None
+        self.__pub_client = None
 
     # def _publish(self, topic, msg):
     #     """向指定topic推送消息，未连接状态则不进行推送"""
@@ -46,13 +51,13 @@ class MQTTConnection:
 
     def publish(self, msg_label: 'PubMsgLabel'):
         """向指定topic推送消息，未连接状态则不进行推送"""
-        return self._state.publish(msg_label)
+        return self.__pub_client.publish(msg_label)
 
-    def loading_msg(self, msg_type: Type[DetailMsgType]):
-        """获取当前的所有消息，以遍历形式读取，未连接状态则返回空列表"""
-        return self._state.loading_msg(msg_type)
+    def loading_msg(self, msg_type: Type[DetailMsgType]) -> Iterator[Tuple[DetailMsgType, MsgInfo]]:
+        """获取当前的所有消息，以遍历形式读取"""
+        return self.__msg_transfer.loading_msg(msg_type)
 
-    def connect(self, broker: str, port: int, topics: Union[str, Iterable[str], None]):
+    def connect(self, broker, port, topics):
         """
 
         Args:
@@ -60,44 +65,12 @@ class MQTTConnection:
             port: 端口号
             topics: 需要订阅的一系列主题，若为空则订阅所有可用MSG_TYPE中的主题
         """
-        self._state = OpenMQTTConnection(broker, port, topics)
+        self.__sub_thread.start()
+        self.__sub_thread = SubClientThread(broker, port, topics)
+        self.__pub_client = PubClient(broker, port)
+        self.__sub_thread.start()
+        self.state = True
 
-    @property
-    def status(self):
-        """获取通信连接状态"""
-        return self._state.status
-
-
-CONVERT_METHOD = ['json', 'flatbuffers', 'raw']
-
-
-class PubMsgLabel:
-    """任意通过MQTT传输的消息均要通过转换成该类"""
-
-    def __init__(self, raw_msg: Any, msg_type: DetailMsgType, convert_method: str, multiple: bool = False):
-        """
-
-        Args:
-            raw_msg: 消息内容, most likely type: dict
-            msg_type: 消息的类型
-            convert_method: 发送前需要转换成的数据
-            multiple: 消息是否为可迭代的多条消息，当有多条消息需要发送时raw_msg为list需要设为true
-
-        """
-        self.raw_msg = raw_msg
-        self.msg_type = msg_type
-        self.convert_method = convert_method
-        self.multiple = multiple
-
-    @property
-    def convert_method(self):
-        return self._convert_method
-
-    @convert_method.setter
-    def convert_method(self, value):
-        if not isinstance(value, str) or value not in CONVERT_METHOD:
-            raise ValueError(f'given convert method is not defined, allowed value: {",".join(CONVERT_METHOD)}')
-        self._convert_method = value
 
 
 class MessageTransfer:
@@ -119,10 +92,10 @@ class MessageTransfer:
             logger.debug('unspecified message type')
 
     @classmethod
-    def loading_msg(cls, msg_type: Type[DetailMsgType]) -> Optional[Iterator[Tuple[DetailMsgType, dict]]]:
+    def loading_msg(cls, msg_type: Type[DetailMsgType]) -> Iterator[Tuple[DetailMsgType, MsgInfo]]:
         """
-        获取当前的所有消息
-        Returns: 生成器:(消息的类型, 内容对应的字典)
+        获取当前的所有消息，使用for循环读取
+        Returns: 生成器:(消息的类型, 内容对应的字典)，可能为空
         """
         if msg_type == DataMsg:
             _pop_queue = cls.__data_queue
@@ -133,7 +106,7 @@ class MessageTransfer:
         else:
             raise TypeError(f'wrong message type: {msg_type}')
         if _pop_queue.empty():
-            return None
+            yield from ()  # 生成一个空的迭代器
 
         while not _pop_queue.empty():
             yield _pop_queue.get_nowait()
@@ -275,36 +248,3 @@ class PubClient:
 
         self._publish(_msg, target_topic)
 
-
-class OpenMQTTConnection:
-    status = True
-
-    def __init__(self, broker: str, port: int, topics: Union[str, Iterable[str], None]):
-        self.__msg_transfer = MessageTransfer()
-        self.__sub_thread = SubClientThread(broker, port, topics)
-        self.__pub_client = PubClient(broker, port)
-        self.__sub_thread.start()
-
-    def publish(self, topic, msg):
-        """向指定topic推送消息"""
-        self.__pub_client.publish(topic, msg)
-
-    def loading_msg(self, msg_type: Type[DetailMsgType]):
-        """获取当前的所有消息，以遍历形式读取"""
-        return self.__msg_transfer.loading_msg(msg_type)
-
-    def closed(self):
-        pass
-
-
-class ClosedMQTTConnection:
-    status = False
-
-    @staticmethod
-    def publish(*args):
-        logger.info('cannot publish before connecting')
-
-    @staticmethod
-    def loading_msg(msg_type: Type[DetailMsgType]):
-        logger.info('cannot loading received message before connecting')
-        return []

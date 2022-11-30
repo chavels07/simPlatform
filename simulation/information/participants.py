@@ -9,7 +9,8 @@ import traci
 import sumolib
 from datetime import datetime
 
-from simulation.lib.public_data import create_SafetyMessage, DataMsg
+from simulation.lib.public_data import create_SafetyMessage
+from simulation.lib.public_conn_data import DataMsg
 from simulation.connection.mqtt import PubMsgLabel
 
 
