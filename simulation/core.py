@@ -15,9 +15,9 @@ from functools import partial
 from typing import List, Dict, Optional, Callable
 
 from simulation.lib.common import logger, singleton
-from simulation.lib.public_data import OrderMsg
+from simulation.lib.public_data import OrderMsg, DetailMsgType
 from simulation.lib.sim_data import ImplementTask, InfoTask, EvalTask, NaiveSimInfoStorage, ArterialSimInfoStorage
-from simulation.connection.mqtt import MQTTConnection
+from simulation.connection.mqtt import MQTTConnection, PubMsgLabel
 
 # 校验环境变量中是否存在SUMO_HOME
 if 'SUMO_HOME' in os.environ:
@@ -167,16 +167,30 @@ def emit_eval_event(event: EvalEventType, *args, **kwargs):
 
 
 def handle_trajectory_record_event(*args, **kwargs) -> None:
-    """以json文件形式保存轨迹"""
+    """
+    以json文件形式保存轨迹
+    Args:
+        *args:
+        **kwargs:
+        1) single_file: bool 是否为单个测评
+        2) docker_name: str docker名
+        3) sub_name: str 多任务时子任务的文件名
+        4) traj_record_dir: str 轨迹数据存储路径
+    """
     veh_info = {}
     # TODO: get vehicle info
 
-    veh_info_json = json.dumps(veh_info, indent=2)
-    filename = kwargs.get("name")
-    traj_file_path = kwargs.get("traj_file_path")
-    with open(traj_file_path + filename + ".json", "w+") as f:
-        f.write(veh_info_json)
-
+    traj_record_dir = kwargs.get("traj_record_dir")
+    docker_name = kwargs.get('docker_name')
+    single_file = kwargs.get('single_file')
+    path = '.json'
+    if single_file:
+        path = '/'.join((traj_record_dir, docker_name)) + path
+    else:
+        sub_name = kwargs.get('sub_name')
+        path = '/'.join((traj_record_dir, docker_name, sub_name)) + path
+    with open(path, 'w+') as f:
+        json.dump(veh_info, f)
 
 
 def handle_eval_apply_event(*args, **kwargs) -> None:
@@ -184,34 +198,91 @@ def handle_eval_apply_event(*args, **kwargs) -> None:
     执行测评系统获取评分
     Args:
         *args:
-        **kwargs: required argument: 1) eval_record: Dict[str, dict], 2) eval_name: str
-
+        **kwargs: required argument: 
+        1) eval_exe_path: str 评测exe路径
+        2) single_file: bool 是否为单个测评
+        3) docker_name: str docker名 
+        4) sub_name: str 多任务时子任务的文件名 若为单测评则此项可为空
+        5) traj_record_dir: str 轨迹数据存储路径
+        6) eval_record_dir: str 评测结果存储路径
+        若为单次测评 结果存储于eval_record_dir/docker_name.json
+        若为多测评 结果存储于eval_record_dir/docker_name/sub_name.json
     Returns:
 
     """
-    eval_record_dir = kwargs.get('eval_record_path') # ../data/evaluation/
-    eval_name = kwargs.get('eval_name')
+    
     eval_exe_path = kwargs.get('eval_exe_path') # ../bin/main.exe
-    if eval_record_dir is None:
-        raise EventArgumentError('apply score event handling requires key-only argument "eval_record"')
-    if eval_name is None:
-        raise EventArgumentError('apply score event handling requires key-only argument "eval_name"')
+    single_file = kwargs.get('single_file')
+    docker_name = kwargs.get('docker_name')
+    traj_record_dir = kwargs.get('traj_record_dir') #../data/trajectory/
+    eval_record_dir = kwargs.get('eval_record_path') # ../data/evaluation/
+    # if eval_record_dir is None:
+    #     raise EventArgumentError('apply score event handling requires key-only argument "eval_record"')
+    # if docker_name is None:
+    #     raise EventArgumentError('apply score event handling requires key-only argument "eval_name"')
 
+    traj_file_path = ''
+    eval_file_path = ''
     # 运行测评程序得到eval res
-    eval_cmd = [eval_exe_path, eval_name + ".json"]
+    if single_file:
+        traj_file_path = os.path.join(traj_record_dir, docker_name) + '.json'
+        eval_file_path = os.path.join(eval_record_dir, docker_name) + '.json'    
+    else:
+        sub_name = kwargs.get('sub_name')
+        traj_file_path = os.path.join(traj_record_dir, docker_name, sub_name) + '.json'
+        eval_file_path = os.path.join(eval_record_dir, docker_name, sub_name) + '.json'
+    eval_cmd = [eval_exe_path, traj_file_path, eval_file_path]
     process = subprocess.Popen(eval_cmd)
     exit_code = process.wait()
     # 仅在评测异常时由主程序写入结果，否则由评测程序写入
     if exit_code != 0:
-        eval_res = {'score': 0, 'detail': 'evaluation faliure'}
-        eval_res_json = json.dumps(eval_res, indent=2)
-        with open(eval_record_dir + eval_name + ".json", 'w+') as f:
-            f.write(eval_res_json)
+        eval_res = {'score': -1, 'detail': 'evaluation faliure'}
+        with open(eval_file_path, 'w+') as f:
+            json.dump(eval_res, f)
 
 
 def handle_score_report_event(*args, **kwargs) -> None:
-    """分数上报"""
-    pass
+    """
+    分数上报 多流量仿真评测时合并评测分数
+    Args:
+        *args:
+        **kwargs:
+        1) single_file 是否为单个测评
+        2) eval_record_dir: str 评测结果存储路径
+        3) docker_name: str docker名 
+        4) connection mqtt连接
+    """
+    single_file = kwargs.get('single_file')
+    eval_record_dir = kwargs.get('eval_record_dir')
+    docker_name = kwargs.get('docker_name')
+    all_result = {}
+    if single_file:
+        path = os.path.join(eval_record_dir, docker_name) + '.json'
+        with open(path, 'r') as f:
+            all_result = json.load(f)
+    else:
+        eval_record_dir = kwargs.get('eval_record_dir')
+        docker_name = kwargs.get('docker_name')
+        all_result = {'score': 0, 'name': docker_name, 'abnormal': 0}
+        detail = {'errorTimes': 0, 'detailInfo': []}
+        eval_count = 0
+        for file in os.listdir(os.path.join(eval_record_dir, docker_name)):
+            eval_count += 1
+            with open(file, 'r') as f:
+                single_result: dict = json.load(f)
+                if single_result['score'] == -1: # evaluation error
+                    all_result['abnormal'] = 1
+                    detail['errorTimes'] = detail['errorTimes'] + 1
+                    detail['detailInfo'].append(single_result['detail'])
+                else:
+                    all_result['score'] = all_result['score'] + single_file['score']
+                    detail['detailInfo'].append(single_result)
+        all_result['score'] = float(all_result['score']) / float(eval_count)
+        all_result['detail'] = detail
+    connection = kwargs.get('connection')
+    connection.publish(PubMsgLabel(all_result, DetailMsgType.ScoreReport,'json'))
+
+
 
 
 def initialize_score_prepare():
@@ -249,7 +320,7 @@ class AlgorithmEval:
     def auto_initialize_event():
         initialize_score_prepare()
 
-    def eval_task_from_directory(self, sce_dir_fp: str, detector_fp: Optional[str], *, f_name_startswith: str = None,
+    def sim_task_from_directory(self, sce_dir_fp: str, detector_fp: Optional[str], *, f_name_startswith: str = None,
                                  step_limit: int = None, step_len: float = 0):
         """
         从文件夹中读取所有流量文件创建评测任务
@@ -271,7 +342,7 @@ class AlgorithmEval:
         for route_fp in route_fps:
             self.sim_task_start(route_fp, detector_fp, step_limit, step_len)
 
-    def eval_mode_setting(self, single_file: bool, *, route_fp: str = None, sce_dir_fp: str = None,
+    def mode_setting(self, single_file: bool, *, route_fp: str = None, sce_dir_fp: str = None,
                           detector_fp: Optional[str] = None, **kwargs) -> None:
         """
         调用loop_start前，指定测评时流量文件读取模式
