@@ -6,7 +6,7 @@
 from collections import namedtuple
 from dataclasses import dataclass
 from abc import abstractmethod
-from typing import Tuple, Dict, Callable, Any, Optional, TypeVar, NewType
+from typing import Tuple, Dict, Callable, Any, Optional, TypeVar, NewType, List
 
 import sumolib
 import traci
@@ -17,6 +17,7 @@ from simulation.information.traffic import Flow
 from simulation.information.participants import safety_message_pub_msg
 from simulation.application.signal_control import SignalController
 from simulation.connection.mqtt import PubMsgLabel
+from simulation.application.vehicle_control import VehicleController
 
 # IntersectionId = NewType('IntersectionId', str)
 
@@ -88,6 +89,7 @@ class NaiveSimInfoStorage:
     def __init__(self, net):
         self.flow_status = Flow()  # 流量信息存储
         self.signal_controllers = self._initialize_sc(net)  # 信号转换计划
+        self.vehicle_controller = VehicleController()  # 车辆控制实例
 
     @staticmethod
     def _initialize_sc(net: sumolib.net.Net):
@@ -138,9 +140,35 @@ class NaiveSimInfoStorage:
         """
         return InfoTask(safety_message_pub_msg, args=(region,), target_topic=target_topic)  # 等待core执行传入的函数，并发送到topic
 
+    def create_speedguide_task(self, current_time: int, MSG_SpeedGuide_list: List[dict]) -> Optional[List[ImplementTask]]:
+        """
+        根据传入时刻创建车速引导任务：首先获取车速引导信息，创建车速引导任务，删除多余储存
+        Args:
+            current_time:仿真时刻
+            MSG_SpeedGuide_list:当前时刻传入的多条车速引导指令的列表。指令内容详见https://code.zbmec.com/mec_core/mecdata/-/wikis/8-典型应用场景/1-车速引导
+        Returns:
+            车速引导指令。[{veh_id: guide}]
+        """
+        self.vehicle_controller.get_speedguide_info(MSG_SpeedGuide_list)  # 获取车速引导信息
+
+        _guidance ={veh_id: guide for veh_id, guidances in self.vehicle_controller.SpeedGuidanceStorage.items()  \
+            for time, guide in guidances.items() if time == current_time}  # 找出当前时刻的指令
+        if len(_guidance) == 0:
+            return None
+        else:
+            _task = []  # 创建车速引导任务
+            for veh_id, guide in _guidance.items():
+                _task.append(ImplementTask(traci.vehicle.setMaxSpeed(veh_id, guide+0.01), exec_time=current_time))
+                _task.append(ImplementTask(traci.vehicle.setSpeed(veh_id, guide), exec_time=current_time))
+            
+            self.vehicle_controller.update_speedguide_info(current_time)  # 删除多余存储
+
+            return _task
+
     def reset(self):
         """清空当前保存的运行数据"""
         self.flow_status.clear()
+        self.vehicle_controller.clear_speedguide_info()
 
 
 class ArterialSimInfoStorage(NaiveSimInfoStorage):
@@ -153,4 +181,5 @@ class ArterialSimInfoStorage(NaiveSimInfoStorage):
         """清空当前保存的运行数据"""
         super().reset()
         self.transition_status.clear()
+        self.vehicle_controller.clear_speedguide_info()
 

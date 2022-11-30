@@ -132,17 +132,66 @@ def create_DateTimeFilter(last_hour: int = 1) -> dict:
     return _DateTimeFilter
 
 
-def create_SafetyMessage(ptcType: int,
-                         ptcId: int,
+@alltypeassert
+def create_SafetyMessage(ptcId: int,
                          moy: int,
-                         secMark: int):
+                         secMark: int,
+                         lat: int,
+                         lon: int,
+                         x: int,
+                         y: int,
+                         lane_ref_id: int,
+                         speed: int,
+                         direction: int,
+                         width: int,
+                         length: int,
+                         classification: str,
+                         edge_id: str,
+                         lane_id: str,
+                         obuId: List[int] = None
+                         ):
 
     _SafetyMessage = {
-        'ptcType': ptcType,
+        'ptcType': 1,
         'ptcId': ptcId,
+        'obuId': obuId,
         'source': 1,
         'device': [1],
-
+        'moy': moy,
+        'secMark': secMark,
+        'timeConfidence': 'time000002',
+        'pos': {
+            'lat': int(lat * 10000000),
+            'lon': int(lon * 10000000)
+        },
+        'referPos':{
+            'positionX': int(x),
+            'positionY': int(y)
+        },
+        'nodeId':{
+            'region': 1,
+            'id': 0
+        },
+        'laneId': lane_ref_id,
+        'accuracy':{
+            'pos': 'a2m'
+        },
+        'transmission': 'unavailable',
+        'speed': int(speed / 0.02),
+        'heading': direction,
+        'motionCfd':{
+            'speedCfd': 'prec1ms',
+            'headingCfd': 'prec0_01deg'
+        },
+        'size':{
+            'width': int(width * 100),
+            'length': int(length * 100)
+        },
+        'vehicleClass':{
+            'classification': classification
+        },
+        'section_ext_id': edge_id,
+        'lane_ext_id': lane_id
     }
     return _SafetyMessage
 
