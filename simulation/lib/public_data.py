@@ -4,10 +4,11 @@
 # @Description : 存放不仅用于仿真内部，也可用在其他环节所需的数据结构
 
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Tuple, List, TypeVar, Callable, Any, Optional
 
 from simulation.lib.common import alltypeassert
+from simulation.lib.public_conn_data import PubMsgLabel
 
 
 """标准数据结构中默认的常量"""
@@ -58,7 +59,7 @@ class InfoTask(BaseTask):
         super().__init__(exec_func, args=args, kwargs=kwargs, exec_time= exec_time)
         self.target_topic = target_topic  # 如果需要发送信息，确定发送的topic
 
-    def execute(self) -> Tuple[bool, Optional['PubMsgLabel']]:
+    def execute(self) -> Tuple[bool, Optional[PubMsgLabel]]:
         """
 
         Returns: 函数提取后的结果
@@ -70,6 +71,74 @@ class InfoTask(BaseTask):
 
 class EvalTask(BaseTask):
     pass
+
+
+class SimStatus:
+    """记录仿真部分状态值，避免重复调用接口或计算"""
+    sim_time_stamp: Optional[float] = None  # 仿真运行的内部时间
+    start_real_datetime: Optional[datetime] = None  # 仿真开始时运行对应真实世界的时间
+
+    _dynamic_attributes = []  # 记录动态定义的内部使用状态属性(避免污染公共类属性而不去显式声明)
+
+    @classmethod
+    def reset(cls):
+        """重置仿真的状态"""
+        cls.sim_time_stamp = None
+        cls.start_real_datetime = None
+
+        # 清除动态添加的属性
+        for d_attr in cls._dynamic_attributes:
+            delattr(cls, d_attr)
+
+        cls._dynamic_attributes.clear()
+
+    @classmethod
+    def time_rolling(cls, curr_timestamp: float):
+        """
+        更新仿真内部和真实时间
+        Args:
+            curr_timestamp: 仿真当前的时间
+
+        Returns:
+
+        """
+        if cls.start_real_datetime is None:
+            cls.start_real_datetime = datetime.now()
+
+        cls.sim_time_stamp = curr_timestamp
+
+    @classmethod
+    def running_check(cls) -> None:
+        """检查状态信息初始化"""
+        if cls.sim_time_stamp is None:
+            raise RuntimeError('仿真未初始化运行状态信息，无法提取相应信息')
+
+    @classmethod
+    def current_real_time(cls) -> datetime:
+        """仿真当前对应的真实世界时间"""
+        cls.running_check()
+        return cls.start_real_datetime + timedelta(seconds=cls.sim_time_stamp)
+
+    @classmethod
+    def current_moy(cls) -> int:
+        """获取当前moy"""
+        real_time = cls.current_real_time()
+        time_diff = (real_time - cls._real_time_year_begin())
+        moy = time_diff.days * 24 * 60 + time_diff.seconds // 60
+        return moy
+
+    @classmethod
+    def _real_time_year_begin(cls) -> datetime:
+        """获得所在年份的第一天，动态添加属性到类避免datetime的重复实例化"""
+        attr_name = 'real_time_year_begin'
+        cls.running_check()
+        res = getattr(cls, attr_name, None)
+        if res is None:
+            this_year = datetime(cls.start_real_datetime.year, 1, 1)
+            setattr(cls, attr_name, this_year)
+            cls._dynamic_attributes.append(attr_name)
+            res = this_year
+        return res
 
 
 """标准数据格式构造"""
@@ -135,6 +204,7 @@ def create_SignalScheme(scheme_id: int,
 # create_Phasic(1, 1, '', (), 1, 1, 1, 1, 1)
 
 
+@alltypeassert
 def create_DateTimeFilter(last_hour: int = 1) -> dict:
     """
 

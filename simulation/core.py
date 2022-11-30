@@ -10,13 +10,14 @@ import json
 import subprocess
 
 from collections import OrderedDict, defaultdict
+from datetime import datetime
 from enum import Enum, auto
 from functools import partial
-from typing import List, Dict, Optional, Callable
+from typing import List, Dict, Optional, Callable, Union
 
 from simulation.lib.common import logger, singleton
 from simulation.lib.public_conn_data import DataMsg, OrderMsg, SpecialDataMsg, DetailMsgType
-from simulation.lib.public_data import ImplementTask, InfoTask, EvalTask
+from simulation.lib.public_data import ImplementTask, InfoTask, EvalTask, BaseTask, SimStatus
 from simulation.lib.sim_data import NaiveSimInfoStorage, ArterialSimInfoStorage
 from simulation.connection.mqtt import MQTTConnection, PubMsgLabel
 
@@ -50,9 +51,10 @@ class SimCore:
         self.step_limit = None  # 默认限制仿真运行时间, None为无限制
         self.storage = ArterialSimInfoStorage(self.net) if arterial_storage else NaiveSimInfoStorage(
             self.net)  # 仿真部分数据存储
-        self.task_create_func: Dict[DetailMsgType, Callable] = {}
+        self.task_create_func: Dict[DetailMsgType, Callable[[Union[dict, str]], Optional[BaseTask]]] = {}
         self.info_tasks: OrderedDict[int, InfoTask] = OrderedDict()  # TODO:后面还需要实现OD的继承数据结构来保证时间按序排列的
         self.implement_tasks: OrderedDict[int, ImplementTask] = OrderedDict()
+        self.start_time: Optional[datetime] = None  # 仿真的开始时间，确定时间戳
 
     def initialize(self, route_fp: str = None, detector_fp: Optional[str] = None, step_limit: int = None):
         """
@@ -94,11 +96,13 @@ class SimCore:
 
         """
         logger.info('仿真开始')
+        self.start_time = datetime.now()  # 仿真开始时记录开始时间，
         while traci.simulation.getMinExpectedNumber() >= 0:
             traci.simulationStep(step=step_len)
+            # time.sleep(0.1)  # 临时加入
 
             current_timestamp = traci.simulation.getTime()
-
+            SimStatus.time_rolling(current_timestamp)
             # 任务池处理
 
             # pop a task at current time
@@ -122,6 +126,7 @@ class SimCore:
 
         logger.info('仿真结束')
         self._reset()
+        SimStatus.reset()  # 仿真状态信息重置
 
     def _reset(self):
         """运行仿真结束后重置仿真状态"""
@@ -130,19 +135,26 @@ class SimCore:
         self.info_tasks.clear()
         self.implement_tasks.clear()
 
-    def register_task_creator(self, msg_type: DetailMsgType, handler_func: Callable):
+    def register_task_creator(self, msg_type: DetailMsgType, handler_func: Callable[[Union[dict, str]], Optional[BaseTask]]):
         """注册从接收的数据转换成任务的处理方法"""
         self.task_create_func[msg_type] = handler_func
 
+    def quick_register_task_creator_all(self):
+        self.task_create_func[DataMsg.SignalScheme] = self.storage.create_signal_update_task
+        self.task_create_func[DataMsg.SpeedGuide] = self.storage.create_speedguide_task
+        self.task_create_func[SpecialDataMsg.TransitionSS] = ...  # TODO: 过渡方案，要求获取signal_scheme的task
+        self.task_create_func[SpecialDataMsg.SERequirement] = ...
+
     def handle_current_msg(self):
         # 处理标准消息
-        implement_task = []
         for msg_type, msg_info in self.connection.loading_msg(DataMsg):
             handler_func = self.task_create_func.get(msg_type)
             if handler_func is None:
                 pass  # 不处理
 
             new_task = handler_func(msg_info)
+            if new_task is not None:
+                self.implement_tasks[...] = ...  # TODO: 如何放入任务池中
 
 
 """测评系统与仿真无关的内容均以事件形式定义(如生成json轨迹文件，发送评分等)，处理事件的函数的入参以关键词参数形式传入，返回值固定为None"""
@@ -318,6 +330,10 @@ class AlgorithmEval:
     def connect(self, broker: str, port: int, topics=None):
         self.sim.connect(broker, port, topics=topics)
 
+    def initialize(self):
+        """对sim里面的内容进行初始化"""
+        self.sim.quick_register_task_creator_all()
+
     def sim_task_start(self, route_fp: str, detector_fp: Optional[str] = None, step_limit: int = None,
                        step_len: float = 0):
         self.sim.initialize(route_fp, detector_fp, step_limit)
@@ -377,7 +393,7 @@ class AlgorithmEval:
         else:
             if sce_dir_fp is None:
                 raise ValueError('运行文件夹下所有流量文件时sce_dir_fp参数需给定')
-            self.__eval_start_func = partial(self.eval_task_from_directory, sce_dir_fp=sce_dir_fp,
+            self.__eval_start_func = partial(self.sim_task_from_directory, sce_dir_fp=sce_dir_fp,
                                              detector_fp=detector_fp, **kwargs)
 
     def loop_start(self, test_name_split: str = ' '):
@@ -398,5 +414,5 @@ class AlgorithmEval:
             # 有数据时会才会进入循环
             for msg_type, msg_ in recv_msgs:
                 if msg_type is OrderMsg.Start:
-                    self.testing_name = msg_.split(test_name_split)[-1]  # 获取分割后的最后一部分作为测试名称
+                    self.testing_name = msg_['docker'].split(test_name_split)[-1]  # 获取分割后的最后一部分作为测试名称
                     self.__eval_start_func()

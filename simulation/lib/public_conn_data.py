@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # @Time        : 2022/11/30 21:33
 # @File        : public_conn_data.py
-# @Description :
+# @Description : 通信相关的公共数据
 
 from enum import Enum, auto
 from typing import TypeVar, Any

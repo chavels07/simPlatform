@@ -13,7 +13,8 @@ import traci
 
 from simulation.lib.common import logger
 from simulation.lib.public_data import (create_Phasic, create_SignalScheme, create_NodeReferenceID,
-                                        create_DateTimeFilter, signalized_intersection_name_decimal)
+                                        create_DateTimeFilter, signalized_intersection_name_decimal,
+                                        ImplementTask, InfoTask)
 
 
 class TLStatus(Enum):
@@ -220,6 +221,11 @@ class SignalController:
                                             phases=phases)  # TODO: offset
         return signal_scheme
 
+    def get_current_spat(self) -> dict:
+        """获取当前交叉口的SPAT消息"""
+        pass
+
+
     def get_current_logic(self) -> traci.trafficlight.Logic:
         all_programs: List[traci.trafficlight.Logic] = traci.trafficlight.getAllProgramLogics(self.tls_id)
         current_program_id = traci.trafficlight.getProgram(self.tls_id)
@@ -253,7 +259,7 @@ class SignalController:
 
         return next_start_time
 
-    def create_control_task(self, signal_scheme: dict) -> Optional[traci.trafficlight.Logic]:
+    def create_control_task(self, signal_scheme: dict) -> Optional[ImplementTask]:
         """
         创建更新信号配时方案任务
         Args:
@@ -293,7 +299,7 @@ class SignalController:
                     duration = getattr(phase, light_display_order[light_index], 0)  # 按灯色依次读取时间
                     this_phase = current_logic.getPhases()[phase_light_spilt_index]
                     this_phase.duration = duration
-            return current_logic
+            updated_logic = current_logic
         else:
             for phase in phases:
                 movements = phase.get('movements')
@@ -325,6 +331,5 @@ class SignalController:
 
             new_program_id = traci.trafficlight.getProgram(self.tls_id) + 1
             updated_logic = traci.trafficlight.Logic(new_program_id, 1, 0, phases=updated_phases_list)
-            return updated_logic
-        # exec_time = self.get_next_cycle_start()
-        # ImplementTask(traci.trafficlight.setProgramLogic, args=(self.tls_id, updated_logic), exec_time=exec_time)
+        exec_time = self.get_next_cycle_start()
+        return ImplementTask(traci.trafficlight.setProgramLogic, args=(self.tls_id, updated_logic), exec_time=exec_time)

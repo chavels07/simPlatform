@@ -64,11 +64,8 @@ class NaiveSimInfoStorage:
             logger.info(f'cannot find intersection {node_name} in the network for signal scheme data')
             return None
 
-        updated_logic = sc.create_control_task(signal_scheme)
-        if updated_logic is None:
-            return None
-        exec_time = sc.get_next_cycle_start()
-        return ImplementTask(traci.trafficlight.setProgramLogic, args=(sc.tls_id, updated_logic), exec_time=exec_time)
+        sc_control_task = sc.create_control_task(signal_scheme)
+        return sc_control_task
 
     # TODO: create_xxx函数是否可以移到外部
     @staticmethod
@@ -84,19 +81,20 @@ class NaiveSimInfoStorage:
         """
         return InfoTask(safety_message_pub_msg, args=(region,), target_topic=target_topic)  # 等待core执行传入的函数，并发送到topic
 
-    def create_speedguide_task(self, current_time: int, MSG_SpeedGuide_list: List[dict]) -> Optional[List[ImplementTask]]:
+    def create_speedguide_task(self, MSG_SpeedGuide_list: List[dict]) -> Optional[List[ImplementTask]]:
         """
         根据传入时刻创建车速引导任务：首先获取车速引导信息，创建车速引导任务，删除多余储存
         Args:
-            current_time:仿真时刻
             MSG_SpeedGuide_list:当前时刻传入的多条车速引导指令的列表。指令内容详见https://code.zbmec.com/mec_core/mecdata/-/wikis/8-典型应用场景/1-车速引导
         Returns:
             车速引导指令。[{veh_id: guide}]
         """
+        # TODO: msg_speed_guide 应从list[dict]转为 dict，对一条speed_guide_msg生成一个task (Zhu)
+        current_time = traci.simulation.getTime()
         self.vehicle_controller.get_speedguide_info(MSG_SpeedGuide_list)  # 获取车速引导信息
 
-        _guidance ={veh_id: guide for veh_id, guidances in self.vehicle_controller.SpeedGuidanceStorage.items()  \
-            for time, guide in guidances.items() if time == current_time}  # 找出当前时刻的指令
+        _guidance = {veh_id: guide for veh_id, guidances in self.vehicle_controller.SpeedGuidanceStorage.items()
+                     for time, guide in guidances.items() if time == current_time}  # 找出当前时刻的指令
         if len(_guidance) == 0:
             return None
         else:

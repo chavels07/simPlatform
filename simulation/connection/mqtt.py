@@ -65,12 +65,10 @@ class MQTTConnection:
             port: 端口号
             topics: 需要订阅的一系列主题，若为空则订阅所有可用MSG_TYPE中的主题
         """
-        self.__sub_thread.start()
         self.__sub_thread = SubClientThread(broker, port, topics)
         self.__pub_client = PubClient(broker, port)
         self.__sub_thread.start()
         self.state = True
-
 
 
 class MessageTransfer:
@@ -126,8 +124,8 @@ VALID_TOPIC = {item.topic_name: (short_name, item.fb_code) for short_name, item 
 def on_message(client, user_data, msg: MQTTMessage):
     short_topic, msg_type_code = VALID_TOPIC.get(msg.topic)
     if short_topic is not None:
-        msg_len = msg.payload.find(chr(0))
-        msg_value = msg.payload[:msg_len]
+        msg_len = msg.payload.find(0x00)
+        msg_value = msg.payload[:msg_len] if msg_len > 0 else msg.payload
         # type code为None时表示直接传json而不是FB
         if msg_type_code is not None:
             success, msg_value = fb_converter.fb2json(msg_type_code, msg_value)
@@ -135,7 +133,8 @@ def on_message(client, user_data, msg: MQTTMessage):
                 logger.warn(f'fb2json error occurs when receiving message, '
                             f'msg type: {short_topic.name()}, error code: {success}, msg body: {msg_value}')
                 return None
-
+        else:
+            msg_value = msg_value.decode('utf-8')
         msg_ = json.loads(msg_value)  # json 转换成 dict
         MessageTransfer.append(short_topic, msg_)
 
