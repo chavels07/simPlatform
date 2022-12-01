@@ -8,6 +8,7 @@ import sys
 import time
 import json
 import subprocess
+import heapq
 
 from collections import OrderedDict, defaultdict
 from datetime import datetime
@@ -52,8 +53,7 @@ class SimCore:
         self.storage = ArterialSimInfoStorage(self.net) if arterial_storage else NaiveSimInfoStorage(
             self.net)  # 仿真部分数据存储
         self.task_create_func: Dict[DetailMsgType, Callable[[Union[dict, str]], Optional[BaseTask]]] = {}
-        self.info_tasks: OrderedDict[int, InfoTask] = OrderedDict()  # TODO:后面还需要实现OD的继承数据结构来保证时间按序排列的
-        self.implement_tasks: OrderedDict[int, ImplementTask] = OrderedDict()
+        self.task_queue: List[BaseTask] = []
         self.start_time: Optional[datetime] = None  # 仿真的开始时间，确定时间戳
 
     def initialize(self, route_fp: str = None, detector_fp: Optional[str] = None, step_limit: int = None):
@@ -86,6 +86,9 @@ class SimCore:
         """通信是否处于连接状态"""
         return self.connection.state
 
+    def add_new_task(self, new_task: BaseTask):
+        heapq.heappush(self.task_queue, new_task)
+
     def run(self, step_len: float = 0):
         """
 
@@ -103,23 +106,20 @@ class SimCore:
 
             current_timestamp = traci.simulation.getTime()
             SimStatus.time_rolling(current_timestamp)
-            # 任务池处理
-
-            # pop a task at current time
-
+            
             # 控制下发
-            for effect_time, implement_task in self.implement_tasks.items():
-                if effect_time > current_timestamp:
-                    break  # 如果任务需要执行的时间大于当前仿真时间，提前退出
-                success, res = implement_task.execute()  # TODO: 如果控制函数执行后需要在main中修改状态，需要通过返回值传递
-
-            # 读取数据
-            for effect_time, info_task in self.info_tasks.items():
-                if effect_time > current_timestamp:
-                    break  # 如果任务需要执行的时间大于当前仿真时间，提前退出
-                success, msg_label = info_task.execute()  # 返回结果: 执行是否成功, 需要发送的消息Optional[PubMsgLabel]
-                if msg_label is not None and success:
-                    self.connection.publish(msg_label)
+            while not self.task_queue.empty():
+                top_task = self.task_queue[0]
+                if top_task.exec_time > SimStatus.sim_time_stamp:
+                    break
+                elif top_task.exec_time == SimStatus.sim_time_stamp:
+                    if isinstance(top_task, ImplementTask):
+                        success, res = top_task.execute() # TODO: 如果控制函数执行后需要在main中修改状态，需要通过返回值传递
+                    elif isinstance(top_task, InfoTask):
+                        success, msg_label = top_task.execute()  # 返回结果: 执行是否成功, 需要发送的消息Optional[PubMsgLabel]
+                        if msg_label is not None and success:
+                            self.connection.publish(msg_label)
+                heapq.heappop(self.task_queue)
 
             if self.step_limit is not None and current_timestamp > self.step_limit:
                 break  # 完成仿真任务提前终止仿真程序

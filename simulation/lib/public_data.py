@@ -40,6 +40,9 @@ class BaseTask:
     def execute(self):
         return self.exec_func(*self.args, **self.kwargs)
 
+    def __cmp__(self, task):
+        return self.exec_time - task.exec_time
+
 
 class ImplementTask(BaseTask):
     """在仿真中进行控制命令的任务"""
