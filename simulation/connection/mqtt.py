@@ -28,9 +28,9 @@ MSG_TYPE_INFO = {
     OrderMsg.Start: _MsgProperty('MECUpload/1/Start', None),  # 仿真开始
     SpecialDataMsg.TransitionSS: _MsgProperty('MECUpload/1/TransitionSignalScheme', None),  # 过渡周期信控方案
     SpecialDataMsg.SERequirement: _MsgProperty('MECUpload/1/SignalExecutionRequirement', None),  # 请求发送当前执行的信控方案
-    SpecialDataMsg.ScoreReport: _MsgProperty('MECUpload/1/AlgoImageTest', None) # 分数上报
+    
     # 发布
-
+    SpecialDataMsg.ScoreReport: _MsgProperty('MECUpload/1/AlgoImageTest', None) # 分数上报
 }
 
 MsgInfo = Union[dict, str]  # 从通信获取的message类型为dict or str
