@@ -16,10 +16,10 @@ from functools import partial
 from typing import List, Dict, Optional, Callable, Union
 
 from simulation.lib.common import logger, singleton
-from simulation.lib.public_conn_data import DataMsg, OrderMsg, SpecialDataMsg, DetailMsgType
+from simulation.lib.public_conn_data import DataMsg, OrderMsg, SpecialDataMsg, DetailMsgType, PubMsgLabel
 from simulation.lib.public_data import ImplementTask, InfoTask, EvalTask, BaseTask, SimStatus
 from simulation.lib.sim_data import NaiveSimInfoStorage, ArterialSimInfoStorage
-from simulation.connection.mqtt import MQTTConnection, PubMsgLabel
+from simulation.connection.mqtt import MQTTConnection
 
 # 校验环境变量中是否存在SUMO_HOME
 if 'SUMO_HOME' in os.environ:

@@ -10,8 +10,7 @@ import sumolib
 from datetime import datetime
 
 from simulation.lib.public_data import create_SafetyMessage
-from simulation.lib.public_conn_data import DataMsg
-from simulation.connection.mqtt import PubMsgLabel
+from simulation.lib.public_conn_data import DataMsg, PubMsgLabel
 
 
 def get_vehicle_info(step: int, net: str) -> List[dict]:
@@ -68,24 +67,24 @@ def get_vehicle_info(step: int, net: str) -> List[dict]:
             edge_id = 'inter'
             lane_id = 'inter'
             lane_ref_id = 0
-        
+
         safety_message = create_SafetyMessage(
-            ptcId = int(vid_num),
-            moy = moy,
-            secMark = timeStamp,
-            lat = int(lat * 10000000),
-            lon = int(lon * 10000000),
-            x = int(x),
-            y = int(y),
-            lane_ref_id = lane_ref_id,
-            speed = int(vspeed / 0.02),
-            direction = vdirection,
-            width = int(vwidth * 100),
-            length = int(vlength * 100),
-            classification = vclass,
-            edge_id = edge_id,
-            lane_id = lane_id,
-            obuId = obu_id 
+            ptcId=int(vid_num),
+            moy=moy,
+            secMark=timeStamp,
+            lat=int(lat * 10000000),
+            lon=int(lon * 10000000),
+            x=int(x),
+            y=int(y),
+            lane_ref_id=lane_ref_id,
+            speed=int(vspeed / 0.02),
+            direction=vdirection,
+            width=int(vwidth * 100),
+            length=int(vlength * 100),
+            classification=vclass,
+            edge_id=edge_id,
+            lane_id=lane_id,
+            obuId=obu_id
         )  # 创建bsm
         vehicles_info.append(safety_message)
 
@@ -117,7 +116,6 @@ class VehInfo:
         self.veh_id = veh_id  # 车辆id
         self.veh_type = traci.vehicle.getTypeID(self.veh_id)  # 车辆typeid
         self.veh_class = traci.vehicletype.getVehicleClass(self.veh_type)  # 车辆class
-
 
     def getVehSize(self) -> tuple:
         """
@@ -174,7 +172,7 @@ class VehInfo:
             "motorcycle": "motorcycle_TypeUnknown",
             "bus": "transit_TypeUnknown"
         }
-        if self.veh_class in class_dict():
+        if self.veh_class in class_dict:
             return class_dict[self.veh_class]
         else:
             return "unknownVehicleClass"

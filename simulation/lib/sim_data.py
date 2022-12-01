@@ -67,7 +67,6 @@ class NaiveSimInfoStorage:
         sc_control_task = sc.create_control_task(signal_scheme)
         return sc_control_task
 
-    # TODO: create_xxx函数是否可以移到外部
     @staticmethod
     def create_safety_message_info_task(target_topic: str = None, region: set = None):
         """
@@ -79,7 +78,7 @@ class NaiveSimInfoStorage:
         Returns:
 
         """
-        return InfoTask(safety_message_pub_msg, args=(region,), target_topic=target_topic)  # 等待core执行传入的函数，并发送到topic
+        return InfoTask(safety_message_pub_msg, args=(region,), target_topic=target_topic)  # TODO: 等待core执行传入的函数，并发送到topic
 
     def create_speedguide_task(self, MSG_SpeedGuide_list: List[dict]) -> Optional[List[ImplementTask]]:
         """
