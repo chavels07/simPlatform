@@ -81,3 +81,13 @@ def alltypeassert(func):
                     raise TypeError(f'Argument {name} must be {bound_types[name]}, while {type(value)} is given')
         return func(*args, **kwargs)
     return wrapper
+
+
+def common_docs(docstrings: str):
+    def wrapper(func):
+        if func.__doc__ is not None:
+            func.__doc__ = '\n'.join((docstrings, func.__doc__))
+        else:
+            func.__doc__ = docstrings
+        return func
+    return wrapper

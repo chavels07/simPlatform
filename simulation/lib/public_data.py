@@ -5,6 +5,7 @@
 
 import re
 from datetime import datetime, timedelta
+from numbers import Real
 from typing import Tuple, List, Dict, TypeVar, Callable, Any, Optional
 
 from simulation.lib.common import alltypeassert
@@ -15,8 +16,6 @@ REGION = 1
 
 """任务类型"""
 
-
-# TODO: 可以对Task进行任意修改，现版本随便写写的
 
 
 class BaseTask:
@@ -153,7 +152,7 @@ class SimStatus:
         return res
 
 
-"""标准数据格式构造"""
+"""标准数据格式构造, 传入参数的数据取现实标准单位"""
 
 
 @alltypeassert
@@ -249,20 +248,27 @@ def create_DateTimeFilter(last_hour: int = 1) -> dict:
     return _DateTimeFilter
 
 
-# TODO: 检查数据的单位 (Zhuqq)
-def create_TimeCountingDown(start_time: int,
-                            min_end_time: int,
-                            max_end_time: int,
-                            likely_end_time: int,
-                            time_confidence: int,
-                            next_start_time: int,
-                            next_duration: int):
+@alltypeassert
+def create_TimeCountingDown(start_time: Real,
+                            min_end_time: Real,
+                            max_end_time: Real,
+                            likely_end_time: Real,
+                            time_confidence: Real,
+                            next_start_time: Real,
+                            next_duration: Real):
+    """支持int和float输入并做类型检查"""
+    start_time = int(start_time * 10)
     min_end_time = int(min_end_time * 10)
     max_end_time = int(max_end_time * 10)
     if min_end_time == 0:
-        min_end_time = 1 # 避免为0时出现字段丢失
+        min_end_time = 1  # 避免为0时出现字段丢失
     if max_end_time == 0:
         max_end_time = 1
+
+    likely_end_time = int(likely_end_time * 10)
+    time_confidence = int(time_confidence * 10)
+    next_start_time = int(next_start_time * 10)
+    next_duration = int(next_duration * 10)
 
     _TimeCountingDown = {
         'startTime': start_time,
@@ -276,6 +282,7 @@ def create_TimeCountingDown(start_time: int,
     return _TimeCountingDown
 
 
+@alltypeassert
 def create_PhaseState(light: int,
                       timing: dict,
                       timing_type: str = 'DF_TimeCountingDown'):
@@ -287,6 +294,7 @@ def create_PhaseState(light: int,
     return _PhaseState
 
 
+@alltypeassert
 def create_Phase(phase_id: int,
                  phase_states: List[dict]):
     _Phase = {
@@ -296,6 +304,7 @@ def create_Phase(phase_id: int,
     return _Phase
 
 
+@alltypeassert
 def create_DF_IntersectionState(intersection_id: dict,
                                 status: Dict[str, int],
                                 moy: int,
@@ -316,6 +325,7 @@ def create_DF_IntersectionState(intersection_id: dict,
     return _IntersectionState
 
 
+@alltypeassert
 def create_SignalPhaseAndTiming(moy: int,
                                 timestamp: float,
                                 name: str,

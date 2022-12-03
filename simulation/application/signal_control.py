@@ -12,7 +12,7 @@ import sumolib
 import traci
 
 from simulation.lib.common import logger
-from simulation.lib.public_conn_data import PubMsgLabel
+from simulation.lib.public_conn_data import PubMsgLabel, DataMsg
 from simulation.lib.public_data import (create_Phasic, create_SignalScheme, create_NodeReferenceID,
                                         create_DateTimeFilter, create_TimeCountingDown, create_PhaseState, create_Phase,
                                         create_DF_IntersectionState, create_SignalPhaseAndTiming,
@@ -185,7 +185,7 @@ class SignalController:
             conn_info[link_index] = ConnInfo(turn=turn, from_edge=from_edge)
         return tls_id, conn_info
 
-    def get_current_signal_program(self) -> dict:
+    def get_current_signal_scheme(self) -> dict:
         """获取当前交叉口的信号控制方案"""
         current_program_id = traci.trafficlight.getProgram(self.tls_id)
         curr_logic = self.get_current_logic()
@@ -223,6 +223,10 @@ class SignalController:
                                             phases=phases)  # TODO: offset
         return signal_scheme
 
+    def get_current_signal_execution(self) -> dict:
+        """获取当前交叉口执行的信号控制方案, 建议使用signal execution而不是signal scheme"""
+        pass  # TODO: signal scheme转换到signal execution
+
     def get_phases_time_countdown(self) -> Tuple[List[dict], List[int]]:
         """
         获取交叉口所有相位的时间倒计时
@@ -236,9 +240,13 @@ class SignalController:
         cycle_length = sum(phase.duration for phase in local_phases)
 
         timing, lights = [], []
+        yellow_insert_index = None  # 灯色为黄灯单独修改灯色
         for phase_index, phase in enumerate(local_phases):
             status = get_phase_status(phase.state)
             if status is not TLStatus.GREEN:
+                if phase_index == current_phase_index and status is TLStatus.YELLOW:
+                    # 处理绿灯不是第一个周期的情况，插入index为-1时修改lights最后一位，对应最后一个相位
+                    yellow_insert_index = len(lights) - 1
                 continue
 
             # 当前为绿灯周期
@@ -246,13 +254,13 @@ class SignalController:
                 start_time = 0
                 likely_end_time = next_switch_time - SimStatus.sim_time_stamp
                 next_start_time = cycle_length - (phase.duration - likely_end_time)
-                light_state_val = 6  # protected movement allowed
+                light_state_val = 6  # protected movement allowed(green)
             elif phase_index > current_phase_index:
                 assert phase_index - current_phase_index > 1
                 start_time = sum(local_phases[_index].duration for _index in range(current_phase_index + 1, phase_index)) + next_switch_time
                 likely_end_time = start_time + phase.duration
                 next_start_time = start_time + cycle_length
-                light_state_val = 3
+                light_state_val = 3  # stopAndRemain(red)
             else:
                 assert current_phase_index - phase_index > 1
                 start_time = cycle_length - (sum(local_phases[_index].duration
@@ -276,6 +284,8 @@ class SignalController:
                                                   time_confidence=0,
                                                   next_start_time=next_start_time,
                                                   next_duration=next_duration))
+        if yellow_insert_index is not None:
+            lights[yellow_insert_index] = 7  # intersectionClearance(yellow)
         return timing, lights
 
     def get_current_spat(self) -> dict:
@@ -301,6 +311,21 @@ class SignalController:
         return spat
 
     def create_spat_pub_msg(self) -> PubMsgLabel:
+        """创建SPAT推送消息"""
+        newly_spat = self.get_current_spat()
+        return PubMsgLabel(newly_spat, DataMsg.SignalPhaseAndTiming, convert_method='flatbuffers')
+
+    def create_signal_scheme_pub_msg(self) -> PubMsgLabel:
+        """
+        创建signal scheme推送消息
+        推送当前信控方案应当用signal execution, 现临时使用signal scheme
+        Returns:
+
+        """
+        current_ss = self.get_current_signal_scheme()
+        return PubMsgLabel(current_ss, DataMsg.SignalScheme, convert_method='flatbuffers')
+
+    def create_signal_execution_pub_msg(self) -> PubMsgLabel:
         pass
 
     def get_current_logic(self) -> traci.trafficlight.Logic:

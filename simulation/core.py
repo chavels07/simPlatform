@@ -114,7 +114,7 @@ class SimCore:
                     break
                 elif top_task.exec_time == SimStatus.sim_time_stamp:
                     if isinstance(top_task, ImplementTask):
-                        success, res = top_task.execute() # TODO: 如果控制函数执行后需要在main中修改状态，需要通过返回值传递
+                        success, res = top_task.execute()  # TODO: 如果控制函数执行后需要在main中修改状态，需要通过返回值传递
                     elif isinstance(top_task, InfoTask):
                         success, msg_label = top_task.execute()  # 返回结果: 执行是否成功, 需要发送的消息Optional[PubMsgLabel]
                         if msg_label is not None and success:
