@@ -21,6 +21,8 @@ class DataMsg(MsgType):
     SignalScheme = auto()
     SpeedGuide = auto()
     SafetyMessage = auto()
+    SignalPhaseAndTiming = auto()
+    TrafficFlow = auto()
 
 
 class SpecialDataMsg(MsgType):

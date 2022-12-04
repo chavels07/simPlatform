@@ -6,7 +6,7 @@
 from collections import namedtuple
 from dataclasses import dataclass
 from abc import abstractmethod
-from typing import Tuple, Dict, Callable, Any, Optional, TypeVar, NewType, List
+from typing import Tuple, Dict, Callable, Any, Optional, TypeVar, NewType, List, Set
 
 import sumolib
 import traci
@@ -22,6 +22,12 @@ from simulation.application.vehicle_control import VehicleController
 # IntersectionId = NewType('IntersectionId', str)
 
 
+def get_all_detectors(net: sumolib.net.Net):
+    for detector_id in traci.inductionloop.getIDList():
+        lane_id = traci.inductionloop.getLaneID(detector_id)
+
+
+
 @dataclass
 class TransitionIntersection:
     intersection_id: str
@@ -34,9 +40,11 @@ class NaiveSimInfoStorage:
         self.flow_status = Flow()  # 流量信息存储
         self.signal_controllers = self._initialize_sc(net)  # 信号转换计划
         self.vehicle_controller = VehicleController()  # 车辆控制实例
+        self.update_module_method: List[Callable[[], None]] = []
 
     @staticmethod
     def _initialize_sc(net: sumolib.net.Net):
+        """初始化sc控制器"""
         SignalController.load_net(net)  # 初始化signal controller的地图信息
         nodes = net.getNodes()
         scs = {}
@@ -45,10 +53,20 @@ class NaiveSimInfoStorage:
             if node_type != 'traffic_light':
                 continue
 
-            tl_node_id = node.getID()
+            tl_node_id: str = node.getID()
             sc = SignalController(tl_node_id)
             scs[tl_node_id] = sc
         return scs
+
+    def update_storage(self):
+        """执行数据模块中需要执行的更新操作"""
+        for update_func in self.update_module_method:
+            update_func()
+
+    def quick_init_update_execute(self, net: sumolib.net.Net, links: Set[str] = None):
+        self.flow_status.initialize_counter(net, links)
+        flow_update_func = self.flow_status.flow_update_task()
+        self.update_module_method.append(flow_update_func)
 
     def create_signal_update_task(self, signal_scheme: dict) -> Optional[ImplementTask]:
         node = signal_scheme.get('node_id')
@@ -67,7 +85,6 @@ class NaiveSimInfoStorage:
         sc_control_task = sc.create_control_task(signal_scheme)
         return sc_control_task
 
-    # TODO: create_xxx函数是否可以移到外部
     @staticmethod
     def create_safety_message_info_task(target_topic: str = None, region: set = None):
         """
@@ -79,7 +96,7 @@ class NaiveSimInfoStorage:
         Returns:
 
         """
-        return InfoTask(safety_message_pub_msg, args=(region,), target_topic=target_topic)  # 等待core执行传入的函数，并发送到topic
+        return InfoTask(safety_message_pub_msg, args=(region,), target_topic=target_topic)  # TODO: 等待core执行传入的函数，并发送到topic
 
     def create_speedguide_task(self, MSG_SpeedGuide_list: List[dict]) -> Optional[List[ImplementTask]]:
         """

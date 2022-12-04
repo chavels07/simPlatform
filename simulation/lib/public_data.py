@@ -5,24 +5,22 @@
 
 import re
 from datetime import datetime, timedelta
-from typing import Tuple, List, TypeVar, Callable, Any, Optional
+from typing import Tuple, List, Dict, TypeVar, Callable, Any, Optional, Union
 
 from simulation.lib.common import alltypeassert
 from simulation.lib.public_conn_data import PubMsgLabel
 
-
 """标准数据结构中默认的常量"""
 REGION = 1
 
-
 """任务类型"""
-# TODO: 可以对Task进行任意修改，现版本随便写写的
 
 
 class BaseTask:
     """
     仿真中需要执行的任务
     """
+
     def __init__(self, exec_func: Callable, args: tuple = (), kwargs: dict = None, exec_time: Optional[float] = None):
         """
 
@@ -46,6 +44,7 @@ class BaseTask:
 
 class ImplementTask(BaseTask):
     """在仿真中进行控制命令的任务"""
+
     def execute(self) -> Tuple[bool, Any]:
         """
 
@@ -58,9 +57,6 @@ class ImplementTask(BaseTask):
 
 class InfoTask(BaseTask):
     """在仿真中获取信息的任务"""
-    def __init__(self, exec_func: Callable, args=(), kwargs=None, exec_time=None, target_topic: str = None):
-        super().__init__(exec_func, args=args, kwargs=kwargs, exec_time= exec_time)
-        self.target_topic = target_topic  # 如果需要发送信息，确定发送的topic
 
     def execute(self) -> Tuple[bool, Optional[PubMsgLabel]]:
         """
@@ -131,6 +127,12 @@ class SimStatus:
         return moy
 
     @classmethod
+    def current_timestamp_in_minute(cls) -> float:
+        """获取当前所在分钟里的秒数"""
+        real_time = cls.current_real_time()
+        return real_time.second + real_time.microsecond / 1000
+
+    @classmethod
     def _real_time_year_begin(cls) -> datetime:
         """获得所在年份的第一天，动态添加属性到类避免datetime的重复实例化"""
         attr_name = 'real_time_year_begin'
@@ -143,8 +145,17 @@ class SimStatus:
             res = this_year
         return res
 
+    @classmethod
+    def current_real_timestamp(cls):
+        """获取当前真实时间的时间戳"""
+        cls.running_check()
+        real_time = cls.current_real_time()
+        return real_time.timestamp()
 
-"""标准数据格式构造"""
+
+"""标准数据格式构造, 传入参数的数据取现实标准单位"""
+Num = Union[int, float]
+
 @alltypeassert
 def create_NodeReferenceID(node_id: int,
                            region: int = REGION) -> dict:
@@ -204,6 +215,7 @@ def create_SignalScheme(scheme_id: int,
     }
     return _SignalScheme
 
+
 # create_Phasic(1, 1, '', (), 1, 1, 1, 1, 1)
 
 
@@ -238,6 +250,100 @@ def create_DateTimeFilter(last_hour: int = 1) -> dict:
 
 
 @alltypeassert
+def create_TimeCountingDown(start_time: Num,
+                            min_end_time: Num,
+                            max_end_time: Num,
+                            likely_end_time: Num,
+                            time_confidence: Num,
+                            next_start_time: Num,
+                            next_duration: Num):
+    """支持int和float输入并做类型检查"""
+    start_time = int(start_time * 10)
+    min_end_time = int(min_end_time * 10)
+    max_end_time = int(max_end_time * 10)
+    if min_end_time == 0:
+        min_end_time = 1  # 避免为0时出现字段丢失
+    if max_end_time == 0:
+        max_end_time = 1
+
+    likely_end_time = int(likely_end_time * 10)
+    time_confidence = int(time_confidence * 10)
+    next_start_time = int(next_start_time * 10)
+    next_duration = int(next_duration * 10)
+
+    _TimeCountingDown = {
+        'startTime': start_time,
+        'minEndTime': min_end_time,
+        'maxEndTime': max_end_time,
+        'likelyEndTime': likely_end_time,
+        'timeConfidence': time_confidence,
+        'nextStartTime': next_start_time,
+        'nextDuration': next_duration
+    }
+    return _TimeCountingDown
+
+
+@alltypeassert
+def create_PhaseState(light: int,
+                      timing: dict,
+                      timing_type: str = 'DF_TimeCountingDown'):
+    _PhaseState = {
+        'light': light,
+        'timing_type': timing_type,
+        'timing': timing
+    }
+    return _PhaseState
+
+
+@alltypeassert
+def create_Phase(phase_id: int,
+                 phase_states: List[dict]):
+    _Phase = {
+        'id': phase_id,
+        'phaseStates': phase_states
+    }
+    return _Phase
+
+
+@alltypeassert
+def create_DF_IntersectionState(intersection_id: dict,
+                                status: Dict[str, int],
+                                moy: int,
+                                timestamp: float,
+                                time_confidence: int,
+                                phases: List[dict]):
+    timestamp = int(timestamp * 1000)
+    if timestamp == 0:
+        timestamp += 1  # 避免为0时出现字段丢失
+    _IntersectionState = {
+        'intersectionId': intersection_id,
+        'status': status,
+        'moy': moy,
+        'timeStamp': timestamp,
+        'timeConfidence': time_confidence,
+        'phases': phases
+    }
+    return _IntersectionState
+
+
+@alltypeassert
+def create_SignalPhaseAndTiming(moy: int,
+                                timestamp: float,
+                                name: str,
+                                intersections: List[dict]):
+    timestamp = int(timestamp * 1000)
+    if timestamp == 0:
+        timestamp = 1  # 避免为0时出现字段丢失
+    _SignalPhaseAndTiming = {
+        'moy': moy,
+        'timeStamp': timestamp,
+        'name': name,
+        'intersections': intersections
+    }
+    return _SignalPhaseAndTiming
+
+
+@alltypeassert
 def create_SafetyMessage(ptcId: int,
                          moy: int,
                          secMark: int,
@@ -255,7 +361,6 @@ def create_SafetyMessage(ptcId: int,
                          lane_id: str,
                          obuId: List[int] = None
                          ):
-
     _SafetyMessage = {
         'ptcType': 1,
         'ptcId': ptcId,
@@ -269,36 +374,71 @@ def create_SafetyMessage(ptcId: int,
             'lat': int(lat * 10000000),
             'lon': int(lon * 10000000)
         },
-        'referPos':{
+        'referPos': {
             'positionX': int(x),
             'positionY': int(y)
         },
-        'nodeId':{
+        'nodeId': {
             'region': 1,
             'id': 0
         },
         'laneId': lane_ref_id,
-        'accuracy':{
+        'accuracy': {
             'pos': 'a2m'
         },
         'transmission': 'unavailable',
         'speed': int(speed / 0.02),
         'heading': direction,
-        'motionCfd':{
+        'motionCfd': {
             'speedCfd': 'prec1ms',
             'headingCfd': 'prec0_01deg'
         },
-        'size':{
+        'size': {
             'width': int(width * 100),
             'length': int(length * 100)
         },
-        'vehicleClass':{
+        'vehicleClass': {
             'classification': classification
         },
         'section_ext_id': edge_id,
         'lane_ext_id': lane_id
     }
     return _SafetyMessage
+
+
+def create_TrafficFlowStat(map_element: str,
+                           ptc_type: int,
+                           veh_type: str,
+                           volume: int,
+                           speed_area: float):
+    speed_area = int(speed_area * 100)
+    _MapElement = {'ext_id': map_element}
+    _TrafficFlowStat = {
+        'map_element': _MapElement,
+        'map_element_type': 'DE_LaneStatInfo',
+        'ptc_type': ptc_type,
+        'veh_type': veh_type,
+        'volume': volume,
+        'speed_area': speed_area
+    }  # TrafficFlow暂时只提供流量和区域速度数据
+    return _TrafficFlowStat
+
+
+@alltypeassert
+def create_TrafficFlow(node: dict,
+                       gen_time: Num,
+                       stat_type: dict,
+                       stat_type_type: str,
+                       stats: List[dict]):
+    gen_time = int(gen_time)
+    _TrafficFlow = {
+        'node': node,
+        'gen_time': gen_time,
+        'stat_type': stat_type,
+        'stat_type_type': stat_type_type,
+        'stats': stats
+    }
+    return _TrafficFlow
 
 
 """常用方法"""

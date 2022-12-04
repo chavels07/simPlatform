@@ -14,13 +14,13 @@ from collections import OrderedDict, defaultdict
 from datetime import datetime
 from enum import Enum, auto
 from functools import partial
-from typing import List, Dict, Optional, Callable, Union
+from typing import List, Dict, Optional, Callable, Union, Sequence, Type
 
 from simulation.lib.common import logger, singleton
-from simulation.lib.public_conn_data import DataMsg, OrderMsg, SpecialDataMsg, DetailMsgType
+from simulation.lib.public_conn_data import DataMsg, OrderMsg, SpecialDataMsg, DetailMsgType, PubMsgLabel
 from simulation.lib.public_data import ImplementTask, InfoTask, EvalTask, BaseTask, SimStatus
 from simulation.lib.sim_data import NaiveSimInfoStorage, ArterialSimInfoStorage
-from simulation.connection.mqtt import MQTTConnection, PubMsgLabel
+from simulation.connection.mqtt import MQTTConnection
 
 # 校验环境变量中是否存在SUMO_HOME
 if 'SUMO_HOME' in os.environ:
@@ -52,9 +52,10 @@ class SimCore:
         self.step_limit = None  # 默认限制仿真运行时间, None为无限制
         self.storage = ArterialSimInfoStorage(self.net) if arterial_storage else NaiveSimInfoStorage(
             self.net)  # 仿真部分数据存储
+        # 允许创建任务的函数返回一系列任务或单个任务，目的是为了保证不同类型的task creator函数只有单个
+        self.internal_task_creator: List[Callable[[], Union[Sequence[BaseTask], BaseTask]]] = []
         self.task_create_func: Dict[DetailMsgType, Callable[[Union[dict, str]], Optional[BaseTask]]] = {}
         self.task_queue: List[BaseTask] = []
-        self.start_time: Optional[datetime] = None  # 仿真的开始时间，确定时间戳
 
     def initialize(self, route_fp: str = None, detector_fp: Optional[str] = None, step_limit: int = None):
         """
@@ -77,6 +78,7 @@ class SimCore:
             sumoCmd.extend(['-a', detector_fp])
         traci.start(sumoCmd)
         self.step_limit = step_limit
+        self.storage.quick_init_update_execute(self.net)
 
     def connect(self, broker: str, port: int, topics=None):
         """通过MQTT通信完成与服务器的连接"""
@@ -99,22 +101,23 @@ class SimCore:
 
         """
         logger.info('仿真开始')
-        self.start_time = datetime.now()  # 仿真开始时记录开始时间，
         while traci.simulation.getMinExpectedNumber() >= 0:
             traci.simulationStep(step=step_len)
             # time.sleep(0.1)  # 临时加入
 
             current_timestamp = traci.simulation.getTime()
             SimStatus.time_rolling(current_timestamp)
+            self.storage.update_storage()  # 执行storage更新任务
+            self.handle_internal_tasks()  # 内部需要在每次仿真步运行时，可能需要创建的任务
             
             # 控制下发
-            while not self.task_queue.empty():
+            while len(self.task_queue):
                 top_task = self.task_queue[0]
                 if top_task.exec_time > SimStatus.sim_time_stamp:
                     break
                 elif top_task.exec_time == SimStatus.sim_time_stamp:
                     if isinstance(top_task, ImplementTask):
-                        success, res = top_task.execute() # TODO: 如果控制函数执行后需要在main中修改状态，需要通过返回值传递
+                        success, res = top_task.execute()  # TODO: 如果控制函数执行后需要在main中修改状态，需要通过返回值传递
                     elif isinstance(top_task, InfoTask):
                         success, msg_label = top_task.execute()  # 返回结果: 执行是否成功, 需要发送的消息Optional[PubMsgLabel]
                         if msg_label is not None and success:
@@ -132,8 +135,6 @@ class SimCore:
         """运行仿真结束后重置仿真状态"""
         self.step_limit = None
         self.storage.reset()
-        self.info_tasks.clear()
-        self.implement_tasks.clear()
 
     def register_task_creator(self, msg_type: DetailMsgType, handler_func: Callable[[Union[dict, str]], Optional[BaseTask]]):
         """注册从接收的数据转换成任务的处理方法"""
@@ -146,6 +147,7 @@ class SimCore:
         self.task_create_func[SpecialDataMsg.SERequirement] = ...
 
     def handle_current_msg(self):
+        """处理通过通信获得的消息，并转换成Tasks"""
         # 处理标准消息
         for msg_type, msg_info in self.connection.loading_msg(DataMsg):
             handler_func = self.task_create_func.get(msg_type)
@@ -156,6 +158,67 @@ class SimCore:
             if new_task is not None:
                 self.implement_tasks[...] = ...  # TODO: 如何放入任务池中
 
+    def handle_internal_tasks(self):
+        """执行仿真内部需要执行的任务，由于task执行之后马上会被卸载，因此需要提供重复创建task的函数"""
+        for creator_function in self.internal_task_creator:
+            task = creator_function()
+            if isinstance(task, Sequence):
+                for single_task in task:
+                    self.add_new_task(single_task)
+            else:
+                self.add_new_task(task)
+
+    def activate_spat_publish(self, intersections: List[str] = None):
+        """激活仿真SPAT发送功能"""
+
+        required_funcs = []
+        if intersections is None:
+            for ints_id, sc in self.storage.signal_controllers.items():
+                required_funcs.append(sc.create_spat_pub_msg)
+        else:
+            for ints_id in intersections:
+                sc = self.storage.signal_controllers.get(ints_id)
+                if sc is None:
+                    raise ValueError(f'intersection {ints_id} is not in current map')
+
+                required_funcs.append(sc.create_spat_pub_msg)
+
+        self.internal_task_creator.append(partial(_create_info_task, required_funcs, InfoTask))  # task creator创建发送SPAT的task的函数
+
+    def activate_bsm_publish(self):
+        """激活仿真BSM发送功能"""
+        required_funcs = []
+
+    def activate_traffic_flow_publish(self):
+        _task = InfoTask(self.storage.flow_status.create_traffic_flow_pub_msg)
+        self.internal_task_creator.append(partial(_create_single_task, _task, InfoTask))
+
+
+# 创建task creator时需要借助partial将其包装成一个无传入参数的callable函数
+def _create_info_task(funcs, task_type: Type[BaseTask]) -> List[BaseTask]:
+    """
+    辅助创建task，每次调用即可通过传入的funcs重新创建task list
+    Args:
+        funcs: 可产生Task的函数
+        task_type:Task的类型
+
+    Returns:
+
+    """
+    return [task_type(func) for func in funcs]
+
+
+def _create_single_task(func, task_type: Type[BaseTask]) -> BaseTask:
+    """
+    辅助创建task，每次调用后生成一个新的task
+    Args:
+        func: 可产生Task的函数
+        task_type: Task的类型
+
+    Returns:
+
+    """
+    return task_type(func)
 
 """测评系统与仿真无关的内容均以事件形式定义(如生成json轨迹文件，发送评分等)，处理事件的函数的入参以关键词参数形式传入，返回值固定为None"""
 

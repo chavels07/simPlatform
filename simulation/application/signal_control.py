@@ -12,9 +12,11 @@ import sumolib
 import traci
 
 from simulation.lib.common import logger
+from simulation.lib.public_conn_data import PubMsgLabel, DataMsg
 from simulation.lib.public_data import (create_Phasic, create_SignalScheme, create_NodeReferenceID,
-                                        create_DateTimeFilter, signalized_intersection_name_decimal,
-                                        ImplementTask, InfoTask)
+                                        create_DateTimeFilter, create_TimeCountingDown, create_PhaseState, create_Phase,
+                                        create_DF_IntersectionState, create_SignalPhaseAndTiming,
+                                        signalized_intersection_name_decimal, ImplementTask, InfoTask, SimStatus)
 
 
 class TLStatus(Enum):
@@ -183,7 +185,7 @@ class SignalController:
             conn_info[link_index] = ConnInfo(turn=turn, from_edge=from_edge)
         return tls_id, conn_info
 
-    def get_current_signal_program(self) -> dict:
+    def get_current_signal_scheme(self) -> dict:
         """获取当前交叉口的信号控制方案"""
         current_program_id = traci.trafficlight.getProgram(self.tls_id)
         curr_logic = self.get_current_logic()
@@ -221,10 +223,110 @@ class SignalController:
                                             phases=phases)  # TODO: offset
         return signal_scheme
 
+    def get_current_signal_execution(self) -> dict:
+        """获取当前交叉口执行的信号控制方案, 建议使用signal execution而不是signal scheme"""
+        pass  # TODO: signal scheme转换到signal execution
+
+    def get_phases_time_countdown(self) -> Tuple[List[dict], List[int]]:
+        """
+        获取交叉口所有相位的时间倒计时
+        Returns: 1) 各相位time countdown 结构数据 2) 各相位信号灯状态对应的枚举值，参考数据结构中的LightState
+
+        """
+        curr_logic = self.get_current_logic()
+        local_phases: List[traci.trafficlight.Phase] = curr_logic.getPhases()  # TODO: check index从0还是还是1开始
+        current_phase_index = traci.trafficlight.getPhase(self.tls_id)
+        next_switch_time = traci.trafficlight.getNextSwitch(self.tls_id)  # absolute simulation time
+        cycle_length = sum(phase.duration for phase in local_phases)
+
+        timing, lights = [], []
+        yellow_insert_index = None  # 灯色为黄灯单独修改灯色
+        for phase_index, phase in enumerate(local_phases):
+            status = get_phase_status(phase.state)
+            if status is not TLStatus.GREEN:
+                if phase_index == current_phase_index and status is TLStatus.YELLOW:
+                    # 处理绿灯不是第一个周期的情况，插入index为-1时修改lights最后一位，对应最后一个相位
+                    yellow_insert_index = len(lights) - 1
+                continue
+
+            # 当前为绿灯周期
+            if phase_index == current_phase_index:
+                start_time = 0
+                likely_end_time = next_switch_time - SimStatus.sim_time_stamp
+                next_start_time = cycle_length - (phase.duration - likely_end_time)
+                light_state_val = 6  # protected movement allowed(green)
+            elif phase_index > current_phase_index:
+                assert phase_index - current_phase_index > 1
+                start_time = sum(local_phases[_index].duration for _index in range(current_phase_index + 1, phase_index)) + next_switch_time
+                likely_end_time = start_time + phase.duration
+                next_start_time = start_time + cycle_length
+                light_state_val = 3  # stopAndRemain(red)
+            else:
+                assert current_phase_index - phase_index > 1
+                start_time = cycle_length - (sum(local_phases[_index].duration
+                                             for _index in range(phase_index, current_phase_index))
+                                             + phase.duration - next_switch_time)
+                likely_end_time = start_time + phase.duration
+                next_start_time = start_time + cycle_length
+                light_state_val = 3
+
+            delta_min = phase.minDur - phase.duration
+            delta_max = phase.maxDur - phase.duration
+            min_end_time = likely_end_time + delta_min
+            max_end_time = likely_end_time + delta_max
+            next_duration = phase.duration  # 假设信控方案不变化
+
+            lights.append(light_state_val)
+            timing.append(create_TimeCountingDown(start_time=start_time,
+                                                  min_end_time=min_end_time,
+                                                  max_end_time=max_end_time,
+                                                  likely_end_time=likely_end_time,
+                                                  time_confidence=0,
+                                                  next_start_time=next_start_time,
+                                                  next_duration=next_duration))
+        if yellow_insert_index is not None:
+            lights[yellow_insert_index] = 7  # intersectionClearance(yellow)
+        return timing, lights
+
     def get_current_spat(self) -> dict:
         """获取当前交叉口的SPAT消息"""
-        pass
+        timings, lights = self.get_phases_time_countdown()
+        phase_states = [create_PhaseState(light=light, timing=time_countdown) for time_countdown, light in zip(timings, lights)]
+        phases = [create_Phase(phase_id=index, phase_states=[item]) for index, item in enumerate(phase_states, start=1)]
 
+        node_id = create_NodeReferenceID(signalized_intersection_name_decimal(self.ints_id))
+        intersection_status_object = {'status': 5}  # fix timing
+        moy = SimStatus.current_moy()
+        timestamp = SimStatus.current_timestamp_in_minute()
+        intersection_state = create_DF_IntersectionState(intersection_id=node_id,
+                                                         status=intersection_status_object,
+                                                         moy=moy,
+                                                         timestamp=timestamp,
+                                                         time_confidence=0,
+                                                         phases=phases)
+        spat = create_SignalPhaseAndTiming(moy=moy,
+                                           timestamp=timestamp,
+                                           name=self.tls_id,
+                                           intersections=[intersection_state])
+        return spat
+
+    def create_spat_pub_msg(self) -> PubMsgLabel:
+        """创建SPAT推送消息"""
+        newly_spat = self.get_current_spat()
+        return PubMsgLabel(newly_spat, DataMsg.SignalPhaseAndTiming, convert_method='flatbuffers')
+
+    def create_signal_scheme_pub_msg(self) -> PubMsgLabel:
+        """
+        创建signal scheme推送消息
+        推送当前信控方案应当用signal execution, 现临时使用signal scheme
+        Returns:
+
+        """
+        current_ss = self.get_current_signal_scheme()
+        return PubMsgLabel(current_ss, DataMsg.SignalScheme, convert_method='flatbuffers')
+
+    def create_signal_execution_pub_msg(self) -> PubMsgLabel:
+        pass
 
     def get_current_logic(self) -> traci.trafficlight.Logic:
         all_programs: List[traci.trafficlight.Logic] = traci.trafficlight.getAllProgramLogics(self.tls_id)
