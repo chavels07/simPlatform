@@ -88,10 +88,23 @@ def alltypeassert(func):
 
 
 def common_docs(docstrings: str):
+    """为装饰的对象添加相同的docstring内容"""
     def wrapper(func):
         if func.__doc__ is not None:
             func.__doc__ = '\n'.join((docstrings, func.__doc__))
         else:
             func.__doc__ = docstrings
         return func
+    return wrapper
+
+
+def timer(func):
+    """函数运行计时装饰器"""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        start = time.time()
+        res = func(*args, **kwargs)
+        end = time.time()
+        print(f'函数{func.__name__}运行用时{end-start}秒')
+        return res
     return wrapper
