@@ -10,12 +10,14 @@ if __name__ == '__main__':
     algorithm_eval = AlgorithmEval()
     algorithm_eval.connect('121.36.231.253', 1883)
     algorithm_eval.initialize()
+
+    algorithm_eval.sim.activate_traffic_flow_publish()
     # 快速开始仿真
-    # algorithm_eval.sim_task_from_directory(r'..\data\network\route\arterial', r'..\data\network\detector_1.xml', step_limit=300)
+    algorithm_eval.sim_task_from_directory(r'..\data\network\route\arterial', r'..\data\network\detector_1.xml', step_limit=300)
 
     # 等待start指令发出
-    algorithm_eval.mode_setting(False, sce_dir_fp=r'..\data\network\route\arterial', detector_fp=r'..\data\network\detector_1.xml', step_limit=300)
-    algorithm_eval.loop_start()
+    # algorithm_eval.mode_setting(False, sce_dir_fp=r'..\data\network\route\arterial', detector_fp=r'..\data\network\detector_1.xml', step_limit=300)
+    # algorithm_eval.loop_start()
 
 
     # simulation_core = SimCore()

@@ -4,7 +4,7 @@
  
     <input>
         <net-file value="anting.net.xml"/>
-        <route-files value="point16_period15_20.rou.xml"/>
+        <route-files value="route/arterial/arterial.rou.xml"/>
         <!-- <additional-files value="detector_3.xml"/> -->
     </input>
  

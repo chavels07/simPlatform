@@ -5,8 +5,7 @@
 
 import re
 from datetime import datetime, timedelta
-from numbers import Real
-from typing import Tuple, List, Dict, TypeVar, Callable, Any, Optional
+from typing import Tuple, List, Dict, TypeVar, Callable, Any, Optional, Union
 
 from simulation.lib.common import alltypeassert
 from simulation.lib.public_conn_data import PubMsgLabel
@@ -15,7 +14,6 @@ from simulation.lib.public_conn_data import PubMsgLabel
 REGION = 1
 
 """任务类型"""
-
 
 
 class BaseTask:
@@ -59,10 +57,6 @@ class ImplementTask(BaseTask):
 
 class InfoTask(BaseTask):
     """在仿真中获取信息的任务"""
-
-    def __init__(self, exec_func: Callable, args=(), kwargs=None, exec_time=None, target_topic: str = None):
-        super().__init__(exec_func, args=args, kwargs=kwargs, exec_time=exec_time)
-        self.target_topic = target_topic  # 如果需要发送信息，确定发送的topic
 
     def execute(self) -> Tuple[bool, Optional[PubMsgLabel]]:
         """
@@ -151,9 +145,16 @@ class SimStatus:
             res = this_year
         return res
 
+    @classmethod
+    def current_real_timestamp(cls):
+        """获取当前真实时间的时间戳"""
+        cls.running_check()
+        real_time = cls.current_real_time()
+        return real_time.timestamp()
+
 
 """标准数据格式构造, 传入参数的数据取现实标准单位"""
-
+Num = Union[int, float]
 
 @alltypeassert
 def create_NodeReferenceID(node_id: int,
@@ -249,13 +250,13 @@ def create_DateTimeFilter(last_hour: int = 1) -> dict:
 
 
 @alltypeassert
-def create_TimeCountingDown(start_time: Real,
-                            min_end_time: Real,
-                            max_end_time: Real,
-                            likely_end_time: Real,
-                            time_confidence: Real,
-                            next_start_time: Real,
-                            next_duration: Real):
+def create_TimeCountingDown(start_time: Num,
+                            min_end_time: Num,
+                            max_end_time: Num,
+                            likely_end_time: Num,
+                            time_confidence: Num,
+                            next_start_time: Num,
+                            next_duration: Num):
     """支持int和float输入并做类型检查"""
     start_time = int(start_time * 10)
     min_end_time = int(min_end_time * 10)
@@ -403,6 +404,41 @@ def create_SafetyMessage(ptcId: int,
         'lane_ext_id': lane_id
     }
     return _SafetyMessage
+
+
+def create_TrafficFlowStat(map_element: str,
+                           ptc_type: int,
+                           veh_type: str,
+                           volume: int,
+                           speed_area: float):
+    speed_area = int(speed_area * 100)
+    _MapElement = {'ext_id': map_element}
+    _TrafficFlowStat = {
+        'map_element': _MapElement,
+        'map_element_type': 'DE_LaneStatInfo',
+        'ptc_type': ptc_type,
+        'veh_type': veh_type,
+        'volume': volume,
+        'speed_area': speed_area
+    }  # TrafficFlow暂时只提供流量和区域速度数据
+    return _TrafficFlowStat
+
+
+@alltypeassert
+def create_TrafficFlow(node: dict,
+                       gen_time: Num,
+                       stat_type: dict,
+                       stat_type_type: str,
+                       stats: List[dict]):
+    gen_time = int(gen_time)
+    _TrafficFlow = {
+        'node': node,
+        'gen_time': gen_time,
+        'stat_type': stat_type,
+        'stat_type_type': stat_type_type,
+        'stats': stats
+    }
+    return _TrafficFlow
 
 
 """常用方法"""
