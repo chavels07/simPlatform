@@ -118,21 +118,22 @@ class SimCore:
             self.handle_internal_tasks()  # 内部需要在每次仿真步运行时，可能需要创建的任务
             
             # 周期执行任务
-            top_task = self.cycle_task_queue[0]
-            while top_task.exec_time < SimStatus.sim_time_stamp:
-                top_task.exec_time += top_task.cycle_time
-                if top_task.exec_time > SimStatus.sim_time_stamp:
+            if len(self.cycle_task_queue):
+                top_task = self.cycle_task_queue[0]
+                while top_task.exec_time < SimStatus.sim_time_stamp:
+                    top_task.exec_time += top_task.cycle_time
+                    if top_task.exec_time > SimStatus.sim_time_stamp:
+                        heapq.heappop(self.cycle_task_queue)
+                        heapq.heappush(self.cycle_task_queue, top_task)
+                        top_task = self.cycle_task_queue[0]
+                while top_task.exec_time == SimStatus.sim_time_stamp:
+                    success, msg_label = top_task.execute()
+                    if msg_label is not None and success:
+                        self.connection.publish(msg_label)
+                    top_task.exec_time += top_task.cycle_time
                     heapq.heappop(self.cycle_task_queue)
                     heapq.heappush(self.cycle_task_queue, top_task)
                     top_task = self.cycle_task_queue[0]
-            while top_task.exec_time == SimStatus.sim_time_stamp:
-                success, msg_label = top_task.execute()
-                if msg_label is not None and success:
-                    self.connection.publish(msg_label)
-                top_task.exec_time += top_task.cycle_time
-                heapq.heappop(self.cycle_task_queue)
-                heapq.heappush(self.cycle_task_queue, top_task)
-                top_task = self.cycle_task_queue[0]
 
 
             # 单次执行任务
@@ -244,6 +245,7 @@ def _create_single_task(func, task_type: Type[BaseTask]) -> BaseTask:
 
     """
     return task_type(func)
+
 
 """测评系统与仿真无关的内容均以事件形式定义(如生成json轨迹文件，发送评分等)，处理事件的函数的入参以关键词参数形式传入，返回值固定为None"""
 

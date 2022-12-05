@@ -73,8 +73,8 @@ class NaiveSimInfoStorage:
         self.update_module_method.append(flow_update_func)
 
         # TODO: only for test
-        for sc in self.signal_controllers.values():
-            self.update_module_method.append(sc.get_current_spat)
+        # for sc in self.signal_controllers.values():
+        #     self.update_module_method.append(sc.get_current_spat)
 
     def initialize_sc_after_start(self):
         """调用start建立traci连接后为traffic_light添加订阅"""

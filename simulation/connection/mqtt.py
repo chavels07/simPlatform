@@ -225,8 +225,8 @@ class PubClient:
         client.connect(broker, port)
         return client
 
-    def _publish(self, topic: str, msg: str):
-        msg_info = self.client.publish(topic, msg.encode(encoding='utf-8'))
+    def _publish(self, msg: str, topic: str):
+        msg_info = self.client.publish(topic, msg)
         if msg_info.rc != 0:
             logger.info(f'fail to send message to topic {topic}, return code: {msg_info.rc}')
 
@@ -235,7 +235,10 @@ class PubClient:
         if msg_label.convert_method == 'flatbuffers':
             if fb_code is None:
                 raise ValueError(f'no flatbuffers structure for msg type {msg_label.msg_type}')
-            _msg = json.dumps(msg_label.raw_msg)
+            _msg = json.dumps(msg_label.raw_msg).encode('utf-8')
+
+            # print(_msg)
+
             success, _msg = fb_converter.json2fb(fb_code, _msg)
             if success != 0:
                 logger.warn(f'json2fb error occurs when sending message, '

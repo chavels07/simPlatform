@@ -325,12 +325,12 @@ class SignalController:
                                            intersections=[intersection_state])
         return spat
 
-    def create_spat_pub_msg(self) -> PubMsgLabel:
+    def create_spat_pub_msg(self) -> Tuple[bool, PubMsgLabel]:
         """创建SPAT推送消息"""
         newly_spat = self.get_current_spat()
-        return PubMsgLabel(newly_spat, DataMsg.SignalPhaseAndTiming, convert_method='flatbuffers')
+        return True, PubMsgLabel(newly_spat, DataMsg.SignalPhaseAndTiming, convert_method='flatbuffers')
 
-    def create_signal_scheme_pub_msg(self) -> PubMsgLabel:
+    def create_signal_scheme_pub_msg(self) -> Tuple[bool, PubMsgLabel]:
         """
         创建signal scheme推送消息
         推送当前信控方案应当用signal execution, 现临时使用signal scheme
@@ -338,7 +338,7 @@ class SignalController:
 
         """
         current_ss = self.get_current_signal_scheme()
-        return PubMsgLabel(current_ss, DataMsg.SignalScheme, convert_method='flatbuffers')
+        return True, PubMsgLabel(current_ss, DataMsg.SignalScheme, convert_method='flatbuffers')
 
     def create_signal_execution_pub_msg(self) -> PubMsgLabel:
         pass

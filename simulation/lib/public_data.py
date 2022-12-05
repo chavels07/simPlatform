@@ -42,6 +42,8 @@ class BaseTask:
         return self.exec_func(*self.args, **self.kwargs)
 
     def __lt__(self, task):
+        if self.exec_time is None:
+            return -1
         return self.exec_time - task.exec_time
 
 
@@ -133,7 +135,7 @@ class SimStatus:
     def current_timestamp_in_minute(cls) -> float:
         """获取当前所在分钟里的秒数"""
         real_time = cls.current_real_time()
-        return real_time.second + real_time.microsecond / 1000
+        return real_time.second + real_time.microsecond / 1000_000
 
     @classmethod
     def _real_time_year_begin(cls) -> datetime:
