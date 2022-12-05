@@ -81,6 +81,9 @@ class SimCore:
         self.step_limit = step_limit
         self.storage.quick_init_update_execute(self.net)
 
+        # 为traffic light添加订阅消息
+        self.storage.initialize_sc_after_start()
+
     def connect(self, broker: str, port: int, topics=None):
         """通过MQTT通信完成与服务器的连接"""
         self.connection.connect(broker, port, topics)

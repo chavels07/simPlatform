@@ -4,6 +4,7 @@
 # @Description : 通用的工具
 
 import logging
+import time
 from inspect import signature
 from functools import wraps
 from typing import Generic, Dict, Union, Type, Tuple
@@ -108,3 +109,21 @@ def timer(func):
         print(f'函数{func.__name__}运行用时{end-start}秒')
         return res
     return wrapper
+
+
+# class Cache:
+#
+#     def __init__(self, func):
+#         self.func = func
+#         self._func_name = '_' + func.__name__
+#
+#
+#     def __call__(self, *args, **kwargs):
+#         return self.func(*args, **kwargs)
+#
+#     def __get__(self, instance, owner):
+#         if instance is None:
+#             return self
+#
+#         if
+#         setattr(instance, self._func_name, )

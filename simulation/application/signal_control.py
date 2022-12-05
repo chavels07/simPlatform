@@ -6,10 +6,11 @@
 from collections import namedtuple
 from enum import Enum
 from itertools import islice
-from typing import Tuple, List, Dict, Optional
+from typing import Tuple, List, Dict, Optional, Any
 
 import sumolib
 import traci
+import traci.constants as tc
 
 from simulation.lib.common import logger
 from simulation.lib.public_conn_data import PubMsgLabel, DataMsg
@@ -112,10 +113,11 @@ def get_related_movement_from_state(state: str) -> List[int]:
 
 def get_phase_status(state: str) -> TLStatus:
     """根据sumo中相位的信号状态判断相位对应的放行(灯色)类型"""
-    if 'g' in state or 'G' in state:
+    # TODO: 右转常绿如何判断
+    if 'y' in state or 'Y' in state:
+        return TLStatus.YELLOW  # 黄灯应该有最高优先级，存在右转常绿的情况
+    elif 'g' in state or 'G' in state:
         return TLStatus.GREEN
-    elif 'y' in state or 'Y' in state:
-        return TLStatus.YELLOW
     else:
         return TLStatus.RED
 
@@ -169,6 +171,11 @@ class SignalController:
         """加载SignalController的路网"""
         cls._net = net
 
+    def subscribe_info(self):
+        """订阅消息"""
+        traci.trafficlight.subscribe(self.tls_id, (tc.TL_CURRENT_PROGRAM, tc.TL_CURRENT_PHASE,
+                                                   tc.TL_NEXT_SWITCH, tc.TL_COMPLETE_DEFINITION_RYG))
+
     def __ints_tl_mapping_from_connection(self) -> Tuple[str, Dict[int, ConnInfo]]:
         """从connection建立交叉口id和信号灯id的映射，能应对id不直接相当的情况"""
         node: sumolib.net.node.Node = self._net.getNode(self.ints_id)
@@ -185,9 +192,14 @@ class SignalController:
             conn_info[link_index] = ConnInfo(turn=turn, from_edge=from_edge)
         return tls_id, conn_info
 
+    # @SimStatus.cache_property  # 似乎使用速度会慢一些
+    def get_subscribe_info(self) -> Dict[int, Any]:
+        """获取traffic light订阅的数据，通过traci.constant获取字典内的数据"""
+        return traci.trafficlight.getSubscriptionResults(self.tls_id)
+
     def get_current_signal_scheme(self) -> dict:
         """获取当前交叉口的信号控制方案"""
-        current_program_id = traci.trafficlight.getProgram(self.tls_id)
+        current_program_id = self.get_subscribe_info()[tc.TL_CURRENT_PROGRAM]
         curr_logic = self.get_current_logic()
         local_phases: List[traci.trafficlight.Phase] = curr_logic.getPhases()
         gather_phases, movements = phase_gather(local_phases)  # 按照相位传统定义(车流控制)从SUMO中的相位中进行集合转换处理
@@ -233,10 +245,11 @@ class SignalController:
         Returns: 1) 各相位time countdown 结构数据 2) 各相位信号灯状态对应的枚举值，参考数据结构中的LightState
 
         """
+        subscribe_info = self.get_subscribe_info()
         curr_logic = self.get_current_logic()
         local_phases: List[traci.trafficlight.Phase] = curr_logic.getPhases()  # TODO: check index从0还是还是1开始
-        current_phase_index = traci.trafficlight.getPhase(self.tls_id)
-        next_switch_time = traci.trafficlight.getNextSwitch(self.tls_id)  # absolute simulation time
+        current_phase_index = subscribe_info[tc.TL_CURRENT_PHASE]
+        next_switch_time = subscribe_info[tc.TL_NEXT_SWITCH]  # absolute simulation time
         cycle_length = sum(phase.duration for phase in local_phases)
 
         timing, lights = [], []
@@ -256,15 +269,16 @@ class SignalController:
                 next_start_time = cycle_length - (phase.duration - likely_end_time)
                 light_state_val = 6  # protected movement allowed(green)
             elif phase_index > current_phase_index:
-                assert phase_index - current_phase_index > 1
-                start_time = sum(local_phases[_index].duration for _index in range(current_phase_index + 1, phase_index)) + next_switch_time
+                # assert phase_index - current_phase_index > 1
+                start_time = sum(local_phases[_index].duration for _index in
+                                 range(current_phase_index + 1, phase_index)) + next_switch_time
                 likely_end_time = start_time + phase.duration
                 next_start_time = start_time + cycle_length
                 light_state_val = 3  # stopAndRemain(red)
             else:
-                assert current_phase_index - phase_index > 1
+                # assert current_phase_index - phase_index > 1
                 start_time = cycle_length - (sum(local_phases[_index].duration
-                                             for _index in range(phase_index, current_phase_index))
+                                                 for _index in range(phase_index, current_phase_index))
                                              + phase.duration - next_switch_time)
                 likely_end_time = start_time + phase.duration
                 next_start_time = start_time + cycle_length
@@ -291,7 +305,8 @@ class SignalController:
     def get_current_spat(self) -> dict:
         """获取当前交叉口的SPAT消息"""
         timings, lights = self.get_phases_time_countdown()
-        phase_states = [create_PhaseState(light=light, timing=time_countdown) for time_countdown, light in zip(timings, lights)]
+        phase_states = [create_PhaseState(light=light, timing=time_countdown) for time_countdown, light in
+                        zip(timings, lights)]
         phases = [create_Phase(phase_id=index, phase_states=[item]) for index, item in enumerate(phase_states, start=1)]
 
         node_id = create_NodeReferenceID(signalized_intersection_name_decimal(self.ints_id))
@@ -329,8 +344,9 @@ class SignalController:
         pass
 
     def get_current_logic(self) -> traci.trafficlight.Logic:
-        all_programs: List[traci.trafficlight.Logic] = traci.trafficlight.getAllProgramLogics(self.tls_id)
-        current_program_id = traci.trafficlight.getProgram(self.tls_id)
+        subscribe_info = self.get_subscribe_info()
+        all_programs: List[traci.trafficlight.Logic] = subscribe_info[tc.TL_COMPLETE_DEFINITION_RYG]
+        current_program_id = subscribe_info[tc.TL_CURRENT_PROGRAM]
         if len(all_programs) == 1:
             curr_logic = all_programs[0]
         elif len(all_programs) == 0:
@@ -348,9 +364,10 @@ class SignalController:
     def get_next_cycle_start(self) -> float:
         """获取交叉口信号进入下一个周期的时间点"""
         curr_time = traci.simulation.getTime()
-        curr_phase = traci.trafficlight.getPhase(self.tls_id)
+        subscribe_info = self.get_subscribe_info()
+        curr_phase = subscribe_info[tc.TL_CURRENT_PHASE]
         phases: List[traci.trafficlight.Phase] = self.get_current_logic().getPhases()
-        next_start_time = curr_time + traci.trafficlight.getNextSwitch(self.tls_id)
+        next_start_time = subscribe_info[tc.TL_NEXT_SWITCH] - curr_time
         # 处于最后一个相位，直接返回
         if curr_phase == len(phases) - 1:
             return next_start_time
@@ -431,7 +448,7 @@ class SignalController:
                     all_red_state = 'r' * len(self.conn_info)
                     updated_phases_list.append(traci.trafficlight.Phase(all_red, all_red_state))
 
-            new_program_id = traci.trafficlight.getProgram(self.tls_id) + 1
+            new_program_id = self.get_subscribe_info()[tc.TL_CURRENT_PROGRAM] + 1
             updated_logic = traci.trafficlight.Logic(new_program_id, 1, 0, phases=updated_phases_list)
         exec_time = self.get_next_cycle_start()
         return ImplementTask(traci.trafficlight.setProgramLogic, args=(self.tls_id, updated_logic), exec_time=exec_time)

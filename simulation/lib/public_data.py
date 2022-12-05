@@ -4,7 +4,9 @@
 # @Description : 存放不仅用于仿真内部，也可用在其他环节所需的数据结构
 
 import re
+import weakref
 from datetime import datetime, timedelta
+from functools import wraps
 from typing import Tuple, List, Dict, TypeVar, Callable, Any, Optional, Union
 
 from simulation.lib.common import alltypeassert
@@ -153,9 +155,33 @@ class SimStatus:
         real_time = cls.current_real_time()
         return real_time.timestamp()
 
+    @classmethod
+    def cache_property(cls, func):
+        """
+        用于在一次仿真步中多次提取的订阅数据，但不想重复调用traci接口或作为类成员变量存储，
+        可使用该装饰器装饰一个get subscribe方法，例子参考signal_control.py/SignalController Class/get_subscribe_info Method
+        """
+        class _Cache:
+            def __init__(self, _func):
+                self._func = _func
+                self.cache_value = weakref.WeakKeyDictionary()
+
+            def __get__(self, instance, owner):
+                if instance is None:
+                    return self
+                if instance not in self.cache_value:
+                    self.cache_value[instance] = self._func(instance), cls.sim_time_stamp
+                elif cls.sim_time_stamp != self.cache_value[instance][1]:
+                    self.cache_value[instance] = self._func(instance), cls.sim_time_stamp  # 适用于无参的function
+
+                return self.cache_value[instance][0]
+
+        return _Cache(func)
+
 
 """标准数据格式构造, 传入参数的数据取现实标准单位"""
 Num = Union[int, float]
+
 
 @alltypeassert
 def create_NodeReferenceID(node_id: int,

@@ -8,11 +8,13 @@ from typing import Tuple, Iterable, Callable, Set, Dict, List
 from warnings import warn
 
 import traci
+import traci.constants as tc
 import sumolib
 
 from simulation.lib.public_data import (create_TrafficFlowStat, create_TrafficFlow, create_NodeReferenceID, SimStatus,
                                         signalized_intersection_name_decimal)
 from simulation.lib.public_conn_data import PubMsgLabel, DataMsg
+from simulation.lib.common import timer
 
 
 class FlowCounter:
@@ -53,6 +55,9 @@ class Flow:
             intersection_id = edge.getToNode().getID()
             if filter_flag and edge_id not in links:
                 continue
+
+            # 订阅经过的车辆id,平均速度
+            traci.lanearea.subscribe(detector_id, (tc.LAST_STEP_VEHICLE_ID_LIST, tc.LAST_STEP_MEAN_SPEED))
             self.flow_counter[detector_id] = FlowCounter(lane_id)
             self.detector_location.setdefault(intersection_id, []).append(detector_id)
 
@@ -65,10 +70,12 @@ class Flow:
         detector_counter = self.flow_counter[detector]
         if detector_counter.record_start_time is None:
             detector_counter.record_start_time = SimStatus.sim_time_stamp
-        this_step_vehicles = set(traci.lanearea.getLastStepVehicleIDs(detector))  # TODO: 运行较慢，应当改为订阅模式
-        new_arrivals = this_step_vehicles.difference(detector_counter.last_vehicles_set)
+
+        sub_res = traci.lanearea.getSubscriptionResults(detector)
+        this_step_vehicles = set(sub_res[tc.LAST_STEP_VEHICLE_ID_LIST])
+        new_arrivals = this_step_vehicles - detector_counter.last_vehicles_set
         detector_counter.flow_storage += len(new_arrivals)
-        detector_counter.mean_speed = traci.lanearea.getLastStepMeanSpeed(detector)
+        detector_counter.mean_speed = sub_res[tc.LAST_STEP_MEAN_SPEED]
 
     def get_flow(self, detector: str) -> Tuple[int, float]:
         """

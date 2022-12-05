@@ -11,7 +11,7 @@ from typing import Tuple, Dict, Callable, Any, Optional, TypeVar, NewType, List,
 import sumolib
 import traci
 
-from simulation.lib.common import logger
+from simulation.lib.common import logger, timer
 from simulation.lib.public_data import ImplementTask, InfoTask, signalized_intersection_name_str
 from simulation.lib.public_conn_data import PubMsgLabel
 from simulation.information.traffic import Flow
@@ -20,12 +20,6 @@ from simulation.application.signal_control import SignalController
 from simulation.application.vehicle_control import VehicleController
 
 # IntersectionId = NewType('IntersectionId', str)
-
-
-def get_all_detectors(net: sumolib.net.Net):
-    for detector_id in traci.inductionloop.getIDList():
-        lane_id = traci.inductionloop.getLaneID(detector_id)
-
 
 
 @dataclass
@@ -58,15 +52,34 @@ class NaiveSimInfoStorage:
             scs[tl_node_id] = sc
         return scs
 
+    @timer
     def update_storage(self):
         """执行数据模块中需要执行的更新操作"""
         for update_func in self.update_module_method:
             update_func()
 
     def quick_init_update_execute(self, net: sumolib.net.Net, links: Set[str] = None):
+        """
+        快速初始化每一步对sim_data数据更新需要执行的函数
+        Args:
+            net: 地图文件
+            links: 选定的links
+
+        Returns:
+
+        """
         self.flow_status.initialize_counter(net, links)
         flow_update_func = self.flow_status.flow_update_task()
         self.update_module_method.append(flow_update_func)
+
+        # TODO: only for test
+        for sc in self.signal_controllers.values():
+            self.update_module_method.append(sc.get_current_spat)
+
+    def initialize_sc_after_start(self):
+        """调用start建立traci连接后为traffic_light添加订阅"""
+        for sc in self.signal_controllers.values():
+            sc.subscribe_info()
 
     def create_signal_update_task(self, signal_scheme: dict) -> Optional[ImplementTask]:
         node = signal_scheme.get('node_id')
