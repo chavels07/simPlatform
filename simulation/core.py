@@ -55,7 +55,8 @@ class SimCore:
         # 允许创建任务的函数返回一系列任务或单个任务，目的是为了保证不同类型的task creator函数只有单个
         self.internal_task_creator: List[Callable[[], Union[Sequence[BaseTask], BaseTask]]] = []
         self.task_create_func: Dict[DetailMsgType, Callable[[Union[dict, str]], Optional[BaseTask]]] = {}
-        self.task_queue: List[BaseTask] = []
+        self.cycle_task_queue: List[BaseTask] = []
+        self.single_task_queue: List[BaseTask] = []
 
     def initialize(self, route_fp: str = None, detector_fp: Optional[str] = None, step_limit: int = None):
         """
@@ -89,7 +90,10 @@ class SimCore:
         return self.connection.state
 
     def add_new_task(self, new_task: BaseTask):
-        heapq.heappush(self.task_queue, new_task)
+        if new_task.cycle_time is None:
+            heapq.heappush(self.single_task_queue, new_task)
+        else:
+            heapq.heappush(self.cycle_task_queue, new_task)
 
     def run(self, step_len: float = 0):
         """
@@ -110,19 +114,37 @@ class SimCore:
             self.storage.update_storage()  # 执行storage更新任务
             self.handle_internal_tasks()  # 内部需要在每次仿真步运行时，可能需要创建的任务
             
-            # 控制下发
-            while len(self.task_queue):
-                top_task = self.task_queue[0]
+            # 周期执行任务
+            top_task = self.cycle_task_queue[0]
+            while top_task.exec_time < SimStatus.sim_time_stamp:
+                top_task.exec_time += top_task.cycle_time
                 if top_task.exec_time > SimStatus.sim_time_stamp:
-                    break
-                elif top_task.exec_time == SimStatus.sim_time_stamp:
+                    heapq.heappop(self.cycle_task_queue)
+                    heapq.heappush(self.cycle_task_queue, top_task)
+                    top_task = self.cycle_task_queue[0]
+            while top_task.exec_time == SimStatus.sim_time_stamp:
+                success, msg_label = top_task.execute()
+                if msg_label is not None and success:
+                    self.connection.publish(msg_label)
+                top_task.exec_time += top_task.cycle_time
+                heapq.heappop(self.cycle_task_queue)
+                heapq.heappush(self.cycle_task_queue, top_task)
+                top_task = self.cycle_task_queue[0]
+
+
+            # 单次执行任务
+            while len(self.single_task_queue):
+                top_task = self.single_task_queue[0]
+                if top_task.exec_time is None or top_task.exec_time == SimStatus.sim_time_stamp:
                     if isinstance(top_task, ImplementTask):
                         success, res = top_task.execute()  # TODO: 如果控制函数执行后需要在main中修改状态，需要通过返回值传递
                     elif isinstance(top_task, InfoTask):
                         success, msg_label = top_task.execute()  # 返回结果: 执行是否成功, 需要发送的消息Optional[PubMsgLabel]
                         if msg_label is not None and success:
                             self.connection.publish(msg_label)
-                heapq.heappop(self.task_queue)
+                elif top_task.exec_time > SimStatus.sim_time_stamp:
+                    break
+                heapq.heappop(self.single_task_queue)
 
             if self.step_limit is not None and current_timestamp > self.step_limit:
                 break  # 完成仿真任务提前终止仿真程序

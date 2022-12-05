@@ -21,7 +21,7 @@ class BaseTask:
     仿真中需要执行的任务
     """
 
-    def __init__(self, exec_func: Callable, args: tuple = (), kwargs: dict = None, exec_time: Optional[float] = None):
+    def __init__(self, exec_func: Callable, args: tuple = (), kwargs: dict = None, exec_time: Optional[float] = None, cycle_time: Optional[float] = None):
         """
 
         Args:
@@ -34,11 +34,12 @@ class BaseTask:
         self.args = args
         self.kwargs = kwargs if kwargs is not None else {}
         self.exec_time = exec_time
+        self.cycle_time = cycle_time
 
     def execute(self):
         return self.exec_func(*self.args, **self.kwargs)
 
-    def __cmp__(self, task):
+    def __lt__(self, task):
         return self.exec_time - task.exec_time
 
 
