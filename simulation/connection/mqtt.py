@@ -6,6 +6,7 @@
 import json
 import random
 import threading
+import time
 from collections import namedtuple
 from queue import Queue
 from typing import Tuple, Dict, Iterator, Iterable, Union, Optional, Any, Type, Callable
@@ -13,7 +14,7 @@ from typing import Tuple, Dict, Iterator, Iterable, Union, Optional, Any, Type, 
 from paho.mqtt.client import Client, MQTTMessage
 
 from simulation.connection.python_fbconv.fbconv import FBConverter
-from simulation.lib.common import logger
+from simulation.lib.common import logger, timer
 from simulation.lib.public_conn_data import OrderMsg, DataMsg, SpecialDataMsg, DetailMsgType, PubMsgLabel
 
 fb_converter = FBConverter()  # only used here
@@ -70,7 +71,7 @@ class MQTTConnection:
         """
         self.__sub_thread = SubClientThread(broker, port, topics)
         self.__pub_client = PubClient(broker, port)
-        self.__sub_thread.start()
+        # self.__sub_thread.start()
         self.state = True
 
 
@@ -225,11 +226,12 @@ class PubClient:
         client.connect(broker, port)
         return client
 
-    def _publish(self, msg: str, topic: str):
+    def _publish(self, topic: str, msg: str):
         msg_info = self.client.publish(topic, msg)
         if msg_info.rc != 0:
             logger.info(f'fail to send message to topic {topic}, return code: {msg_info.rc}')
 
+    @timer
     def publish(self, msg_label: PubMsgLabel):
         target_topic, fb_code = MSG_TYPE_INFO.get(msg_label.msg_type)
         if msg_label.convert_method == 'flatbuffers':
@@ -251,5 +253,5 @@ class PubClient:
         else:
             raise ValueError(f'cannot handle convert type: {msg_label.convert_method}')
 
-        self._publish(_msg, target_topic)
+        self._publish(target_topic, _msg)
 

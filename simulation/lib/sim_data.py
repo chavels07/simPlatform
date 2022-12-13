@@ -3,19 +3,20 @@
 # @File        : sim_data.py
 # @Description : 存放仿真运行环节需要记录的数据
 
+import json
 from collections import namedtuple
 from dataclasses import dataclass
 from abc import abstractmethod
-from typing import Tuple, Dict, Callable, Any, Optional, TypeVar, NewType, List, Set
+from typing import Tuple, Dict, Callable, Any, Optional, List, Set, Iterable
 
 import sumolib
 import traci
 
 from simulation.lib.common import logger, timer
-from simulation.lib.public_data import ImplementTask, InfoTask, signalized_intersection_name_str
+from simulation.lib.public_data import ImplementTask, InfoTask, signalized_intersection_name_str, SimStatus
 from simulation.lib.public_conn_data import PubMsgLabel
 from simulation.information.traffic import Flow
-from simulation.information.participants import safety_message_pub_msg
+from simulation.information.participants import safety_message_pub_msg, JunctionVehContainer
 from simulation.application.signal_control import SignalController
 from simulation.application.vehicle_control import VehicleController
 
@@ -30,29 +31,51 @@ class TransitionIntersection:
 
 class NaiveSimInfoStorage:
     """针对单点交叉口的运行数据存储"""
-    def __init__(self, net):
+    def __init__(self):
         self.flow_status = Flow()  # 流量信息存储
-        self.signal_controllers = self._initialize_sc(net)  # 信号转换计划
+        self.signal_controllers: Optional[Dict[str, SignalController]] = None  # 信号转换计划
+        self.junction_veh_cons: Optional[Dict[str, JunctionVehContainer]] = None  # 交叉口范围车辆管理器
         self.vehicle_controller = VehicleController()  # 车辆控制实例
+        self.trajectory_info = {}
+
         self.update_module_method: List[Callable[[], None]] = []
 
-    @staticmethod
-    def _initialize_sc(net: sumolib.net.Net):
+    def _test(self):
+        for junction_id, junction in self.junction_veh_cons.items():
+            junction.get_vehicle_info()
+
+    def initialize_sc(self, net: sumolib.net.Net,  junction_list: Iterable[str] = None):
         """初始化sc控制器"""
         SignalController.load_net(net)  # 初始化signal controller的地图信息
-        nodes = net.getNodes()
+        if junction_list is None:
+            junction_list = (node.getID() for node in net.getNodes() if node.getType() == 'traffic_light')
+
         scs = {}
-        for node in nodes:
-            node_type = node.getType()
-            if node_type != 'traffic_light':
-                continue
+        for node_id in junction_list:
+            sc = SignalController(node_id)
+            scs[node_id] = sc
+        self.signal_controllers = scs
 
-            tl_node_id: str = node.getID()
-            sc = SignalController(tl_node_id)
-            scs[tl_node_id] = sc
-        return scs
+    def initialize_participant(self, net: sumolib.net.Net, junction_list: Iterable[str] = None):
+        """
+        初始化交叉口车辆管理器
+        Args:
+            net:
+            junction_list: 所需选定的交叉口范围
 
-    @timer
+        Returns:
+
+        """
+        JunctionVehContainer.load_net(net)
+        if junction_list is None:
+            junction_list = (node.getID() for node in net.getNodes() if node.getType() == 'traffic_light')
+
+        junction_veh_cons = {}
+        for junction in junction_list:
+            junction_veh_con = JunctionVehContainer(junction)
+            junction_veh_cons[junction] = junction_veh_con
+        self.junction_veh_cons = junction_veh_cons
+
     def update_storage(self):
         """执行数据模块中需要执行的更新操作"""
         for update_func in self.update_module_method:
@@ -69,17 +92,22 @@ class NaiveSimInfoStorage:
 
         """
         self.flow_status.initialize_counter(net, links)
-        flow_update_func = self.flow_status.flow_update_task()
-        self.update_module_method.append(flow_update_func)
+        self.update_module_method.append(self.flow_status.flow_update_task())
+        self.update_module_method.append(self.record_trajectories_update_task())
 
         # TODO: only for test
         # for sc in self.signal_controllers.values():
         #     self.update_module_method.append(sc.get_current_spat)
 
-    def initialize_sc_after_start(self):
+    def initialize_sub_after_start(self):
         """调用start建立traci连接后为traffic_light添加订阅"""
-        for sc in self.signal_controllers.values():
-            sc.subscribe_info()
+        if self.signal_controllers is not None:
+            for sc in self.signal_controllers.values():
+                sc.subscribe_info()
+
+        if self.junction_veh_cons is not None:
+            for jun_veh in self.junction_veh_cons.values():
+                jun_veh.subscribe_info()
 
     def create_signal_update_task(self, signal_scheme: dict) -> Optional[ImplementTask]:
         node = signal_scheme.get('node_id')
@@ -137,6 +165,22 @@ class NaiveSimInfoStorage:
 
             return _task
 
+    def record_trajectories_update_task(self, interval: float = 1.) -> Callable[[], None]:
+        """创建轨迹字典记录的更新任务"""
+        def _wrapper():
+            # 只有到整数时记录数据
+            if SimStatus.sim_time_stamp % interval:
+                return None
+            for junction_id, veh_container in self.junction_veh_cons.items():
+                _, trajectories = veh_container.get_vehicle_info()
+                if not trajectories:
+                    return None
+
+                # 记录数据
+                self.trajectory_info.setdefault(junction_id, dict())[str(int(SimStatus.sim_time_stamp))] = trajectories
+
+        return _wrapper
+
     def reset(self):
         """清空当前保存的运行数据"""
         self.flow_status.clear()
@@ -145,8 +189,8 @@ class NaiveSimInfoStorage:
 
 class ArterialSimInfoStorage(NaiveSimInfoStorage):
     """新增干线的运行数据存储"""
-    def __init__(self, net):
-        super().__init__(net)
+    def __init__(self):
+        super().__init__()
         self.transition_status: Dict[str, TransitionIntersection] = {}
 
     def reset(self):

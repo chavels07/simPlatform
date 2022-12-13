@@ -16,7 +16,7 @@ from enum import Enum, auto
 from functools import partial
 from typing import List, Dict, Optional, Callable, Union, Sequence, Type
 
-from simulation.lib.common import logger, singleton
+from simulation.lib.common import logger, singleton, timer
 from simulation.lib.public_conn_data import DataMsg, OrderMsg, SpecialDataMsg, DetailMsgType, PubMsgLabel
 from simulation.lib.public_data import ImplementTask, InfoTask, EvalTask, BaseTask, SimStatus
 from simulation.lib.sim_data import NaiveSimInfoStorage, ArterialSimInfoStorage
@@ -50,8 +50,7 @@ class SimCore:
         self.net = sumolib.net.readNet(network_fp, withLatestPrograms=True)  # 路网对象化数据
         self.connection = MQTTConnection()  # 通信接口实现数据外部交互
         self.step_limit = None  # 默认限制仿真运行时间, None为无限制
-        self.storage = ArterialSimInfoStorage(self.net) if arterial_storage else NaiveSimInfoStorage(
-            self.net)  # 仿真部分数据存储
+        self.storage = ArterialSimInfoStorage() if arterial_storage else NaiveSimInfoStorage()  # 仿真部分数据存储
         # 允许创建任务的函数返回一系列任务或单个任务，目的是为了保证不同类型的task creator函数只有单个
         self.internal_task_creator: List[Callable[[], Union[Sequence[BaseTask], BaseTask]]] = []
         self.task_create_func: Dict[DetailMsgType, Callable[[Union[dict, str]], Optional[BaseTask]]] = {}
@@ -81,8 +80,12 @@ class SimCore:
         self.step_limit = step_limit
         self.storage.quick_init_update_execute(self.net)
 
-        # 为traffic light添加订阅消息
-        self.storage.initialize_sc_after_start()
+        # 运行仿真后添加订阅消息
+        self.storage.initialize_sub_after_start()
+
+    def initialize_internal_storage(self, *, junction_list=None):
+        self.storage.initialize_sc(self.net, junction_list=junction_list)
+        self.storage.initialize_participant(self.net, junction_list=junction_list)
 
     def connect(self, broker: str, port: int, topics=None):
         """通过MQTT通信完成与服务器的连接"""
@@ -110,13 +113,16 @@ class SimCore:
         logger.info('仿真开始')
         while traci.simulation.getMinExpectedNumber() >= 0:
             traci.simulationStep(step=step_len)
-            # time.sleep(0.1)  # 临时加入
+            # time.sleep(0.1)  # 临  时加入
 
             current_timestamp = traci.simulation.getTime()
             SimStatus.time_rolling(current_timestamp)
             self.storage.update_storage()  # 执行storage更新任务
             self.handle_internal_tasks()  # 内部需要在每次仿真步运行时，可能需要创建的任务
-            
+
+            # TODO: test
+            # self.storage._test()
+
             # 周期执行任务
             if len(self.cycle_task_queue):
                 top_task = self.cycle_task_queue[0]
@@ -135,7 +141,7 @@ class SimCore:
                     heapq.heappush(self.cycle_task_queue, top_task)
                     top_task = self.cycle_task_queue[0]
 
-
+            start = time.time()
             # 单次执行任务
             while len(self.single_task_queue):
                 top_task = self.single_task_queue[0]
@@ -143,12 +149,19 @@ class SimCore:
                     if isinstance(top_task, ImplementTask):
                         success, res = top_task.execute()  # TODO: 如果控制函数执行后需要在main中修改状态，需要通过返回值传递
                     elif isinstance(top_task, InfoTask):
+                        start1 = time.time()
                         success, msg_label = top_task.execute()  # 返回结果: 执行是否成功, 需要发送的消息Optional[PubMsgLabel]
+                        start2 = time.time()
                         if msg_label is not None and success:
                             self.connection.publish(msg_label)
+                        end1 = time.time()
+                        print(end1-start2, start2-start1)
                 elif top_task.exec_time > SimStatus.sim_time_stamp:
                     break
                 heapq.heappop(self.single_task_queue)
+
+            end = time.time()
+            # print(f'execute task consume time {end - start}')
 
             if self.step_limit is not None and current_timestamp > self.step_limit:
                 break  # 完成仿真任务提前终止仿真程序
@@ -186,6 +199,7 @@ class SimCore:
 
     def handle_internal_tasks(self):
         """执行仿真内部需要执行的任务，由于task执行之后马上会被卸载，因此需要提供重复创建task的函数"""
+        # TODO: cycle task 已经不会被卸载
         for creator_function in self.internal_task_creator:
             task = creator_function()
             if isinstance(task, Sequence):
@@ -194,7 +208,7 @@ class SimCore:
             else:
                 self.add_new_task(task)
 
-    def activate_spat_publish(self, intersections: List[str] = None):
+    def activate_spat_publish(self, intersections: List[str] = None, pub_cycle: float = 0.1):
         """激活仿真SPAT发送功能"""
 
         required_funcs = []
@@ -209,34 +223,35 @@ class SimCore:
 
                 required_funcs.append(sc.create_spat_pub_msg)
 
-        self.internal_task_creator.append(partial(_create_info_task, required_funcs, InfoTask))  # task creator创建发送SPAT的task的函数
+        self.internal_task_creator.append(partial(_create_info_task, required_funcs, InfoTask, pub_cycle))  # task creator创建发送SPAT的task的函数
 
     def activate_bsm_publish(self):
         """激活仿真BSM发送功能"""
         required_funcs = []
 
-    def activate_traffic_flow_publish(self):
+    def activate_traffic_flow_publish(self, pub_cycle: float = 0.1):
         _task = InfoTask(self.storage.flow_status.create_traffic_flow_pub_msg)
-        self.internal_task_creator.append(partial(_create_single_task, _task, InfoTask))
+        self.internal_task_creator.append(partial(_create_single_task, _task, InfoTask, pub_cycle))
 
 
 # 创建task creator时需要借助partial将其包装成一个无传入参数的callable函数
-def _create_info_task(funcs, task_type: Type[BaseTask]) -> List[BaseTask]:
+def _create_info_task(funcs, task_type: Type[BaseTask], cycle_time: float) -> List[BaseTask]:
     """
-    辅助创建task，每次调用即可通过传入的funcs重新创建task list
+    辅助创建周期性的task，每次调用即可通过传入的funcs重新创建task list
     Args:
         funcs: 可产生Task的函数
-        task_type:Task的类型
+        task_type: Task的类型
+        cycle_time: 周期执行的时间
 
     Returns:
 
     """
-    return [task_type(func) for func in funcs]
+    return [task_type(func, ) for func in funcs]
 
 
-def _create_single_task(func, task_type: Type[BaseTask]) -> BaseTask:
+def _create_single_task(func, task_type: Type[BaseTask], cycle_time: float) -> BaseTask:
     """
-    辅助创建task，每次调用后生成一个新的task
+    辅助创建周期性的task，每次调用后生成一个新的task
     Args:
         func: 可产生Task的函数
         task_type: Task的类型
@@ -244,7 +259,7 @@ def _create_single_task(func, task_type: Type[BaseTask]) -> BaseTask:
     Returns:
 
     """
-    return task_type(func)
+    return task_type(func, )
 
 
 """测评系统与仿真无关的内容均以事件形式定义(如生成json轨迹文件，发送评分等)，处理事件的函数的入参以关键词参数形式传入，返回值固定为None"""
@@ -287,20 +302,20 @@ def emit_eval_event(event: EvalEventType, *args, **kwargs):
 def handle_trajectory_record_event(*args, **kwargs) -> None:
     """
     以json文件形式保存轨迹
+
     Args:
         *args:
-        **kwargs:
-        1) single_file: bool 是否为单个测评
-        2) docker_name: str docker名
-        3) sub_name: str 多任务时子任务的文件名
-        4) traj_record_dir: str 轨迹数据存储路径
+        **kwargs: 1) single_file: bool 是否为单个测评 2) docker_name: str docker名 3) sub_name: str 多任务时子任务的文件名
+                  4) traj_record_dir: str 轨迹数据存储路径 5) veh_info: dict 字典
+
     """
     veh_info = {}
     # TODO: get vehicle info
 
-    traj_record_dir = kwargs.get("traj_record_dir")
-    docker_name = kwargs.get('docker_name')
-    single_file = kwargs.get('single_file')
+    traj_record_dir = kwargs.get('traj_record_dir', '../data/output')  # 目录赞写死
+    docker_name = kwargs.get('docker_name', 'test')
+    single_file = kwargs.get('single_file', True)
+    veh_info = kwargs.get('veh_info')
     path = '.json'
     if single_file:
         path = '/'.join((traj_record_dir, docker_name)) + path
@@ -308,7 +323,17 @@ def handle_trajectory_record_event(*args, **kwargs) -> None:
         sub_name = kwargs.get('sub_name')
         path = '/'.join((traj_record_dir, docker_name, sub_name)) + path
     with open(path, 'w+') as f:
-        json.dump(veh_info, f)
+        json.dump(veh_info, f, indent=2)
+
+
+def handle_multiple_trajectory_record_event(*args, **kwargs) -> None:
+    trajectories = kwargs.get('trajectories')
+    save_dir = '../data/output'
+
+    for junction_id, veh_info in trajectories.items():
+        handle_trajectory_record_event(traj_record_dir=save_dir, docker_name='_'.join(('test4', junction_id)), veh_info=veh_info)
+
+    logger.info(f'轨迹记录已保存在{save_dir}')
 
 
 def handle_eval_apply_event(*args, **kwargs) -> None:
@@ -403,7 +428,8 @@ def handle_score_report_event(*args, **kwargs) -> None:
 
 def initialize_score_prepare():
     """注册评分相关的事件"""
-    subscribe_eval_event(EvalEventType.FINISH_TASK, handle_trajectory_record_event)
+    # subscribe_eval_event(EvalEventType.FINISH_TASK, handle_trajectory_record_event)
+    subscribe_eval_event(EvalEventType.FINISH_TASK, handle_multiple_trajectory_record_event)
     subscribe_eval_event(EvalEventType.START_EVAL, handle_eval_apply_event)
     subscribe_eval_event(EvalEventType.FINISH_EVAL, handle_score_report_event)
 
@@ -428,7 +454,8 @@ class AlgorithmEval:
                        step_len: float = 0):
         self.sim.initialize(route_fp, detector_fp, step_limit)
         self.sim.run(step_len)
-        emit_eval_event(EvalEventType.FINISH_TASK, sim_core=self.sim, eval_record=self.eval_record)
+        emit_eval_event(EvalEventType.FINISH_TASK, sim_core=self.sim, eval_record=self.eval_record,
+                        trajectories=self.sim.storage.trajectory_info)
 
         traci.close()
 

@@ -3,21 +3,21 @@
 # @File        : participants.py
 # @Description : 交通参与者信息提取
 
-from typing import Tuple, List, Optional
+from typing import Tuple, List, Dict, Optional
 
 import traci
+import traci.constants as tc
 import sumolib
-from datetime import datetime
 
-from simulation.lib.public_data import create_SafetyMessage
+from simulation.lib.public_data import (create_SafetyMessage, create_NodeReferenceID, create_trajectory, SimStatus,
+                                        veh_name_from_flow_decimal, signalized_intersection_name_decimal)
 from simulation.lib.public_conn_data import DataMsg, PubMsgLabel
 
 
-def get_vehicle_info(step: int, net: str) -> List[dict]:
+def get_vehicle_info(net: str) -> List[dict]:
     """
     获取车辆消息
     Args:
-        step: 仿真步
         net: 路网文件
     Returns:
         所有车辆bsm
@@ -25,15 +25,9 @@ def get_vehicle_info(step: int, net: str) -> List[dict]:
     vehicles_list = traci.vehicle.getIDList()  # 获取当前路网中所有车辆
     vehicles_info = []  # 创建bsm list
 
-    # 时间处理
-    now = datetime.now()
-    this_year = datetime(now.year, 1, 1)
-    time_diff = now - this_year
-    minute_sum = time_diff.days * 24 * 60  # 取当天的时间加到moy里
-    moy = int(step // 60) + minute_sum
-    timeStamp = int((step % 60) * 1000)
-    if timeStamp == 0:
-        timeStamp += 1  # 避免为0时字段丢失的问题
+    # 从SimStatus中读数据
+    moy = SimStatus.current_moy()
+    timeStamp = SimStatus.current_timestamp_in_minute()
 
     for veh_id in vehicles_list:
         vehicle = VehInfo(veh_id, net)  # 创建车辆实例
@@ -100,7 +94,7 @@ def safety_message_pub_msg(step: int, net: str) -> Tuple[bool, Optional[PubMsgLa
     Returns:
 
     """
-    vehicles_info = get_vehicle_info(step, net)  # 调用traci接口获取所有车辆的消息
+    vehicles_info = get_vehicle_info(net)  # 调用traci接口获取所有车辆的消息
     pub_label = PubMsgLabel(vehicles_info, DataMsg.SafetyMessage, convert_method='flatbuffers', multiple=True)
     return True, pub_label
 
@@ -128,7 +122,7 @@ class VehInfo:
         vwidth = traci.vehicletype.getWidth(self.veh_type)  # 车辆宽度
         vheight = traci.vehicletype.getHeight(self.veh_type)  # 车辆高度
         return vlength, vwidth, vheight
-    
+
     def getSpeed(self) -> float:
         """
         获取车辆速度信息
@@ -136,7 +130,7 @@ class VehInfo:
         Returns:
             车辆速度（m/s）
         """
-        vspeed = traci.vehicle.getSpeed(self.veh_id)  
+        vspeed = traci.vehicle.getSpeed(self.veh_id)
         return vspeed
 
     def getAcceleration(self) -> float:
@@ -158,7 +152,7 @@ class VehInfo:
         """
         vlane = traci.vehicle.getLaneID(self.veh_id)
         return vlane
-    
+
     def getClass(self) -> str:
         """
         获取bsm中定义的车辆类型
@@ -215,4 +209,76 @@ class VehInfo:
             return obu_id
         else:
             return None
-    
+
+
+def get_vehicle_class(veh_class: str):
+    class_mapping = {
+        'passenger': 'passenger_Vehicle_TypeUnknown',
+        'emergency': 'emergency_TypeUnknown',
+        'motorcycle': 'motorcycle_TypeUnknown',
+        'bus': 'transit_TypeUnknown'
+    }
+    return class_mapping.get(veh_class, 'unknownVehicleClass')
+
+
+# Jimmy Zhu
+class JunctionVehContainer:
+    _net = None
+
+    def __init__(self, junction_id: str):
+        self.junction_id = junction_id
+
+    @classmethod
+    def load_net(cls, net: sumolib.net.Net):
+        """加载JunctionVehContainer的路网"""
+        cls._net = net
+
+    def subscribe_info(self, region_dis: int = 100):
+        sub_vars = [tc.VAR_POSITION, tc.VAR_SPEED, tc.VAR_ACCELERATION, tc.VAR_ANGLE, tc.VAR_LENGTH, tc.VAR_WIDTH,
+                    tc.VAR_HEIGHT, tc.VAR_VEHICLECLASS, tc.VAR_ROAD_ID, tc.VAR_LANE_ID, tc.VAR_LANE_INDEX]
+        traci.junction.subscribeContext(self.junction_id, tc.CMD_GET_VEHICLE_VARIABLE, region_dis, sub_vars)
+
+    def get_vehicle_info(self) -> Tuple[List[dict], Dict[str, dict]]:
+        sub_res: dict = traci.junction.getContextSubscriptionResults(self.junction_id)
+
+        node = create_NodeReferenceID(signalized_intersection_name_decimal(self.junction_id)) if sub_res else None
+        safety_msgs, trajectories = [], {}
+
+        for veh_id, veh_info in sub_res.items():
+            veh_id_num = veh_name_from_flow_decimal(veh_id)
+            local_x, local_y = veh_info[tc.VAR_POSITION]
+            lon, lat = self._net.convertXY2LonLat(local_x, local_y)
+
+            _SafetyMessage = create_SafetyMessage(ptcId=veh_id_num,
+                                                  moy=SimStatus.current_moy(),
+                                                  secMark=SimStatus.current_timestamp_in_minute(),
+                                                  lat=lat,
+                                                  lon=lon,
+                                                  x=local_x,
+                                                  y=local_y,
+                                                  node=node,
+                                                  lane_ref_id=veh_info[tc.VAR_LANE_INDEX],
+                                                  speed=veh_info[tc.VAR_SPEED],
+                                                  direction=veh_info[tc.VAR_ANGLE],
+                                                  width=veh_info[tc.VAR_WIDTH],
+                                                  length=veh_info[tc.VAR_LENGTH],
+                                                  classification=get_vehicle_class(veh_info[tc.VAR_VEHICLECLASS]),
+                                                  edge_id=veh_info[tc.VAR_ROAD_ID],
+                                                  lane_id=veh_info[tc.VAR_LANE_ID])
+
+            trajectory = create_trajectory(ptcId=veh_id_num,
+                                           moy=SimStatus.current_moy(),
+                                           secMark=SimStatus.current_timestamp_in_minute(),
+                                           lat=lat,
+                                           lon=lon,
+                                           node=self.junction_id,
+                                           lane_ref_id=veh_info[tc.VAR_LANE_INDEX],
+                                           speed=veh_info[tc.VAR_SPEED],
+                                           direction=veh_info[tc.VAR_ANGLE],
+                                           classification=get_vehicle_class(veh_info[tc.VAR_VEHICLECLASS]),
+                                           edge_id=veh_info[tc.VAR_ROAD_ID])
+            safety_msgs.append(_SafetyMessage)
+            trajectories[str(veh_id_num)] = trajectory
+        return safety_msgs, trajectories
+
+

@@ -103,9 +103,9 @@ def timer(func):
     """函数运行计时装饰器"""
     @wraps(func)
     def wrapper(*args, **kwargs):
-        start = time.time()
+        start = time.clock()
         res = func(*args, **kwargs)
-        end = time.time()
+        end = time.clock()
         print(f'函数{func.__name__}运行用时{end-start}秒')
         return res
     return wrapper

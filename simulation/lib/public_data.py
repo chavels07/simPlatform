@@ -35,7 +35,7 @@ class BaseTask:
         self.exec_func = exec_func
         self.args = args
         self.kwargs = kwargs if kwargs is not None else {}
-        self.exec_time = exec_time
+        self.exec_time = exec_time if cycle_time is None else 0
         self.cycle_time = cycle_time
 
     def execute(self):
@@ -372,24 +372,92 @@ def create_SignalPhaseAndTiming(moy: int,
     return _SignalPhaseAndTiming
 
 
+# @alltypeassert
+# def create_SafetyMessage(ptcId: int,
+#                          moy: int,
+#                          secMark: float,
+#                          lat: int,
+#                          lon: int,
+#                          x: int,
+#                          y: int,
+#                          lane_ref_id: int,
+#                          speed: int,
+#                          direction: int,
+#                          width: int,
+#                          length: int,
+#                          classification: str,
+#                          edge_id: str,
+#                          lane_id: str,
+#                          obuId: List[int] = None
+#                          ):
+#     secMark = int(secMark * 1000)
+#     if secMark == 0:
+#         secMark += 1  # 避免为0时字段丢失的问题
+#     _SafetyMessage = {
+#         'ptcType': 1,
+#         'ptcId': ptcId,
+#         'obuId': obuId,
+#         'source': 1,
+#         'device': [1],
+#         'moy': moy,
+#         'secMark': secMark,
+#         'timeConfidence': 'time000002',
+#         'pos': {
+#             'lat': int(lat * 10000000),
+#             'lon': int(lon * 10000000)
+#         },
+#         'referPos': {
+#             'positionX': int(x),
+#             'positionY': int(y)
+#         },
+#         'nodeId': {
+#             'region': 1,
+#             'id': 0
+#         },
+#         'laneId': lane_ref_id,
+#         'accuracy': {
+#             'pos': 'a2m'
+#         },
+#         'transmission': 'unavailable',
+#         'speed': int(speed / 0.02),
+#         'heading': direction,
+#         'motionCfd': {
+#             'speedCfd': 'prec1ms',
+#             'headingCfd': 'prec0_01deg'
+#         },
+#         'size': {
+#             'width': int(width * 100),
+#             'length': int(length * 100)
+#         },
+#         'vehicleClass': {
+#             'classification': classification
+#         },
+#         'section_ext_id': edge_id,
+#         'lane_ext_id': lane_id
+#     }
+#     return _SafetyMessage
+
 @alltypeassert
 def create_SafetyMessage(ptcId: int,
                          moy: int,
-                         secMark: int,
-                         lat: int,
-                         lon: int,
-                         x: int,
-                         y: int,
+                         secMark: float,
+                         lat: float,
+                         lon: float,
+                         x: float,
+                         y: float,
+                         node: dict,
                          lane_ref_id: int,
-                         speed: int,
-                         direction: int,
-                         width: int,
-                         length: int,
+                         speed: float,
+                         direction: float,
+                         width: float,
+                         length: float,
                          classification: str,
                          edge_id: str,
                          lane_id: str,
-                         obuId: List[int] = None
-                         ):
+                         obuId: List[int] = None):
+    secMark = int(secMark * 1000)
+    if secMark == 0:
+        secMark += 1  # 避免为0时字段丢失的问题
     _SafetyMessage = {
         'ptcType': 1,
         'ptcId': ptcId,
@@ -400,24 +468,21 @@ def create_SafetyMessage(ptcId: int,
         'secMark': secMark,
         'timeConfidence': 'time000002',
         'pos': {
-            'lat': int(lat * 10000000),
-            'lon': int(lon * 10000000)
+            'lat': int(lat * 1e7),
+            'lon': int(lon * 1e7)
         },
         'referPos': {
             'positionX': int(x),
             'positionY': int(y)
         },
-        'nodeId': {
-            'region': 1,
-            'id': 0
-        },
+        'nodeId': node,
         'laneId': lane_ref_id,
         'accuracy': {
             'pos': 'a2m'
         },
         'transmission': 'unavailable',
         'speed': int(speed / 0.02),
-        'heading': direction,
+        'heading': int(direction / 0.0125),
         'motionCfd': {
             'speedCfd': 'prec1ms',
             'headingCfd': 'prec0_01deg'
@@ -433,6 +498,49 @@ def create_SafetyMessage(ptcId: int,
         'lane_ext_id': lane_id
     }
     return _SafetyMessage
+
+
+def create_trajectory(ptcId: int,
+                      moy: int,
+                      secMark: float,
+                      lat: float,
+                      lon: float,
+                      node: str,
+                      lane_ref_id: int,
+                      speed: float,
+                      direction: float,
+                      classification: str,
+                      edge_id: str,
+                      auto_level: int = 1,
+                      auto_status: int = 1):
+    secMark = int(secMark * 1000)
+    if secMark == 0:
+        secMark += 1  # 避免为0时字段丢失的问题
+    trajectory = {
+        'ptcType': 1,
+        'ptcId': ptcId,
+        'source': 1,
+        'device': [1],
+        'moy': moy,
+        'secMark': secMark,
+        'timeConfidence': 'time000002',
+        'pos': {
+            'lat': int(lat * 1e7),
+            'lon': int(lon * 1e7)
+        },
+        'laneId': lane_ref_id,
+        'speed': int(speed / 0.02),
+        'heading': int(direction / 0.0125),
+        'vehicleClass': {
+            'classification': classification
+        },
+        'junction': node,
+        'link': edge_id,
+        'turning': 0,
+        'autoLevel': auto_level,
+        'autoStatus': auto_status
+    }
+    return trajectory
 
 
 def create_TrafficFlowStat(map_element: str,
@@ -471,8 +579,8 @@ def create_TrafficFlow(node: dict,
 
 
 """常用方法"""
-point_numeric_pat = re.compile(r'point(\d+)')
-minus_numeric_pat = re.compile(r'-(\d+)')
+POINT_NUMERIC_PAT = re.compile(r'point(\d+)')
+MINUS_NUMERIC_PAT = re.compile(r'-(\d+)')
 
 
 def signalized_intersection_name_decimal(ints: str) -> int:
@@ -485,12 +593,13 @@ def signalized_intersection_name_decimal(ints: str) -> int:
 
     """
     if ints.startswith('point'):
-        ints_num = point_numeric_pat.match(ints).group(1)
+        ints_num = POINT_NUMERIC_PAT.match(ints).group(1)
     elif ints.startswith('-'):
-        ints_num = minus_numeric_pat.match(ints).group(1)
+        ints_num = MINUS_NUMERIC_PAT.match(ints).group(1)
     else:
         raise ValueError(f'unexpected intersection name: {ints}')
-    return int(ints_num)
+    # return int(ints_num)
+    return 10  # Temporary
 
 
 def signalized_intersection_name_str(ints: int) -> str:
@@ -502,4 +611,29 @@ def signalized_intersection_name_str(ints: int) -> str:
     Returns: 交叉口名称
 
     """
-    pass
+    attach_char = '-' if ints // 1000 else 'point'  # 编号小于1000则是信控交叉口，使用point作为前缀
+    return attach_char + str(ints)
+
+
+FLOW_VEH_PAT = re.compile(r'flow(\d+).(\d+)')
+
+
+def veh_name_from_flow_decimal(veh_id: str) -> int:
+    """
+    从以Flow作为输入的车辆名称字符串提取数字部分
+    Args:
+        veh_id: 从SUMO提取的车辆id字符串
+
+    Returns: 车辆数字ID
+
+    Raises: ValueError(数字过大，超过65535)
+
+    Warnings: Flow的id不能超过65, 输入的车辆总数不宜超过1000(500对于Flow65)
+    """
+    match_res = FLOW_VEH_PAT.match(veh_id)
+    flow_id = match_res.group(1)
+    veh_in_flow_id = match_res.group(2)
+    numeric_veh_id = int(flow_id) * 1000 + int(veh_in_flow_id)
+    if numeric_veh_id > 65535:
+        raise ValueError('vehicle id exceeds 65535, invalid number')
+    return numeric_veh_id
