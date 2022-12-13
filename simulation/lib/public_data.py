@@ -4,6 +4,7 @@
 # @Description : 存放不仅用于仿真内部，也可用在其他环节所需的数据结构
 
 import re
+import time
 import weakref
 from datetime import datetime, timedelta
 from functools import wraps
@@ -127,7 +128,7 @@ class SimStatus:
     def current_moy(cls) -> int:
         """获取当前moy"""
         real_time = cls.current_real_time()
-        time_diff = (real_time - cls._real_time_year_begin())
+        time_diff = (real_time - cls.real_time_year_begin())
         moy = time_diff.days * 24 * 60 + time_diff.seconds // 60
         return moy
 
@@ -138,9 +139,9 @@ class SimStatus:
         return real_time.second + real_time.microsecond / 1000_000
 
     @classmethod
-    def _real_time_year_begin(cls) -> datetime:
+    def real_time_year_begin(cls) -> datetime:
         """获得所在年份的第一天，动态添加属性到类避免datetime的重复实例化"""
-        attr_name = 'real_time_year_begin'
+        attr_name = '_real_time_year_begin'
         cls.running_check()
         res = getattr(cls, attr_name, None)
         if res is None:
@@ -148,6 +149,18 @@ class SimStatus:
             setattr(cls, attr_name, this_year)
             cls._dynamic_attributes.append(attr_name)
             res = this_year
+        return res
+
+    @classmethod
+    def start_real_unix_timestamp(cls):
+        cls.running_check()
+        attr_name = '_start_real_unix_timestamp'
+        res = getattr(cls, attr_name, None)
+        if res is None:
+            ts = time.mktime(cls.start_real_datetime.timetuple())
+            setattr(cls, attr_name, ts)
+            cls._dynamic_attributes.append(attr_name)
+            res = ts
         return res
 
     @classmethod
@@ -372,6 +385,43 @@ def create_SignalPhaseAndTiming(moy: int,
     return _SignalPhaseAndTiming
 
 
+@alltypeassert
+def create_PhasicExec(phasic_id: int,
+                      order: int,
+                      movements: List[str],
+                      green: Num,
+                      yellow: Num,
+                      allred: Num):
+    _PhasicExec = {
+        'phasic_id': phasic_id,
+        'order': order,
+        'movements': movements,
+        'green': int(green),
+        'yellow': int(yellow),
+        'allred': int(allred)
+    }
+    return _PhasicExec
+
+
+@alltypeassert
+def create_SignalExecution(node_id: dict,
+                           sequence: int,
+                           control_mode: int,
+                           cycle: Num,
+                           base_signal_scheme_id: int,
+                           start_time: float,
+                           phases: List[dict]):
+    _SignalExecution = {
+        'node_id': node_id,
+        'sequence': sequence,
+        'control_mode': control_mode,
+        'cycle': cycle,
+        'base_signal_scheme_id': base_signal_scheme_id,
+        'start_time': int(start_time),
+        'phases': phases
+    }
+
+
 # @alltypeassert
 # def create_SafetyMessage(ptcId: int,
 #                          moy: int,
@@ -449,6 +499,7 @@ def create_SafetyMessage(ptcId: int,
                          lane_ref_id: int,
                          speed: float,
                          direction: float,
+                         acceleration: float,
                          width: float,
                          length: float,
                          classification: str,
@@ -487,6 +538,9 @@ def create_SafetyMessage(ptcId: int,
             'speedCfd': 'prec1ms',
             'headingCfd': 'prec0_01deg'
         },
+        'accelSet': {
+            "long": int(acceleration / 0.01)
+        },
         'size': {
             'width': int(width * 100),
             'length': int(length * 100)
@@ -509,6 +563,7 @@ def create_trajectory(ptcId: int,
                       lane_ref_id: int,
                       speed: float,
                       direction: float,
+                      acceleration: float,
                       classification: str,
                       edge_id: str,
                       auto_level: int = 1,
@@ -531,6 +586,9 @@ def create_trajectory(ptcId: int,
         'laneId': lane_ref_id,
         'speed': int(speed / 0.02),
         'heading': int(direction / 0.0125),
+        'accelSet': {
+            "long": int(acceleration / 0.01)
+        },
         'vehicleClass': {
             'classification': classification
         },

@@ -331,7 +331,8 @@ def handle_multiple_trajectory_record_event(*args, **kwargs) -> None:
     save_dir = '../data/output'
 
     for junction_id, veh_info in trajectories.items():
-        handle_trajectory_record_event(traj_record_dir=save_dir, docker_name='_'.join(('test4', junction_id)), veh_info=veh_info)
+        handle_trajectory_record_event(traj_record_dir=save_dir, veh_info=veh_info)
+        # handle_trajectory_record_event(traj_record_dir=save_dir, docker_name='_'.join(('test1', junction_id)), veh_info=veh_info)
 
     logger.info(f'轨迹记录已保存在{save_dir}')
 

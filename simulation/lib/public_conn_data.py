@@ -19,6 +19,7 @@ class OrderMsg(MsgType):
 class DataMsg(MsgType):
     # 标准数据结构
     SignalScheme = auto()
+    SignalExecution = auto()
     SpeedGuide = auto()
     SafetyMessage = auto()
     SignalPhaseAndTiming = auto()

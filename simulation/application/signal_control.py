@@ -16,8 +16,8 @@ from simulation.lib.common import logger
 from simulation.lib.public_conn_data import PubMsgLabel, DataMsg
 from simulation.lib.public_data import (create_Phasic, create_SignalScheme, create_NodeReferenceID,
                                         create_DateTimeFilter, create_TimeCountingDown, create_PhaseState, create_Phase,
-                                        create_DF_IntersectionState, create_SignalPhaseAndTiming,
-                                        signalized_intersection_name_decimal, ImplementTask, InfoTask, SimStatus)
+                                        create_DF_IntersectionState, create_SignalPhaseAndTiming, create_PhasicExec,
+                                        create_SignalExecution, signalized_intersection_name_decimal, ImplementTask, InfoTask, SimStatus)
 
 
 class TLStatus(Enum):
@@ -237,7 +237,34 @@ class SignalController:
 
     def get_current_signal_execution(self) -> dict:
         """获取当前交叉口执行的信号控制方案, 建议使用signal execution而不是signal scheme"""
-        pass  # TODO: signal scheme转换到signal execution
+        current_program_id = self.get_subscribe_info()[tc.TL_CURRENT_PROGRAM]
+        curr_logic = self.get_current_logic()
+        local_phases: List[traci.trafficlight.Phase] = curr_logic.getPhases()
+        gather_phases, movements = phase_gather(local_phases)  # 按照相位传统定义(车流控制)从SUMO中的相位中进行集合转换处理
+        assert len(gather_phases) == len(movements), \
+            f'phase count is not equivalent to movement group count in intersection {self.ints_id}'
+
+        cycle_length = 0
+        phases = []
+        for index, (timing, mov) in enumerate(zip(gather_phases, movements), start=1):
+            phasic_exec = create_PhasicExec(phasic_id=index,
+                                            order=index,
+                                            movements=0,
+                                            green=timing.green,
+                                            yellow=timing.yellow,
+                                            allred=timing.allred)  # TODO: movement怎么和MAP对应，可以按照东西南北的逻辑，但是MAP对不对得齐需要确认
+            phases.append(phasic_exec)
+            cycle_length += timing.time_sum
+
+        node_id = create_NodeReferenceID(signalized_intersection_name_decimal(self.ints_id))
+        signal_execution = create_SignalExecution(node_id=node_id,
+                                                  sequence=0,
+                                                  control_mode=0,
+                                                  cycle=cycle_length,
+                                                  base_signal_scheme_id=current_program_id,
+                                                  start_time=SimStatus.start_real_unix_timestamp(),
+                                                  phases=phases)
+        return signal_execution
 
     def get_phases_time_countdown(self) -> Tuple[List[dict], List[int]]:
         """
@@ -340,8 +367,9 @@ class SignalController:
         current_ss = self.get_current_signal_scheme()
         return True, PubMsgLabel(current_ss, DataMsg.SignalScheme, convert_method='flatbuffers')
 
-    def create_signal_execution_pub_msg(self) -> PubMsgLabel:
-        pass
+    def create_signal_execution_pub_msg(self) -> Tuple[bool, PubMsgLabel]:
+        current_se = self.get_current_signal_execution()
+        return True, PubMsgLabel(current_se, DataMsg.SignalExecution, convert_method='flatbuffers')
 
     def get_current_logic(self) -> traci.trafficlight.Logic:
         subscribe_info = self.get_subscribe_info()

@@ -262,6 +262,7 @@ class JunctionVehContainer:
                                                   direction=veh_info[tc.VAR_ANGLE],
                                                   width=veh_info[tc.VAR_WIDTH],
                                                   length=veh_info[tc.VAR_LENGTH],
+                                                  acceleration=veh_info[tc.VAR_ACCELERATION],
                                                   classification=get_vehicle_class(veh_info[tc.VAR_VEHICLECLASS]),
                                                   edge_id=veh_info[tc.VAR_ROAD_ID],
                                                   lane_id=veh_info[tc.VAR_LANE_ID])
@@ -275,6 +276,7 @@ class JunctionVehContainer:
                                            lane_ref_id=veh_info[tc.VAR_LANE_INDEX],
                                            speed=veh_info[tc.VAR_SPEED],
                                            direction=veh_info[tc.VAR_ANGLE],
+                                           acceleration=veh_info[tc.VAR_ACCELERATION],
                                            classification=get_vehicle_class(veh_info[tc.VAR_VEHICLECLASS]),
                                            edge_id=veh_info[tc.VAR_ROAD_ID])
             safety_msgs.append(_SafetyMessage)
