@@ -134,13 +134,15 @@ class SimCore:
                         heapq.heappush(self.cycle_task_queue, top_task)
                         top_task = self.cycle_task_queue[0]
                 while top_task.exec_time == SimStatus.sim_time_stamp:
+                    print(id(top_task))
                     success, msg_label = top_task.execute()
                     if msg_label is not None and success:
                         self.connection.publish(msg_label)
-                    top_task.exec_time += top_task.cycle_time
+                    top_task.exec_time = round(top_task.cycle_time + top_task.exec_time, 3)  # 防止浮点数运算时精度损失
                     heapq.heappop(self.cycle_task_queue)
                     heapq.heappush(self.cycle_task_queue, top_task)
                     top_task = self.cycle_task_queue[0]
+                    print(id(top_task))
 
             start = time.time()
             # 单次执行任务

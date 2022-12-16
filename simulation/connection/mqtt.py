@@ -174,6 +174,16 @@ def on_message(client, user_data, msg: MQTTMessage):
     #     info_fb['SpeedGuide'] = str(msg.payload.decode(encoding="utf-8"))
 
 
+def on_disconnect(client, userdata, rc):
+    if rc != 0:
+        print('Attempting to reconnect')
+        try:
+            client.reconnect()
+            logger.info('Reconnect successfully')
+        except Exception as e:
+            logger.warn('Reconnection failed, data publish stopped')
+
+
 class SubClientThread(threading.Thread):
     """
     接收订阅线程
