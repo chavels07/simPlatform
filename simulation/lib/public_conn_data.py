@@ -14,6 +14,7 @@ class MsgType(Enum):
 class OrderMsg(MsgType):
     # 控制命令
     Start = auto()
+    ScoreReport = auto()
 
 
 class DataMsg(MsgType):
@@ -30,7 +31,6 @@ class SpecialDataMsg(MsgType):
     # 仿真专用数据结构
     TransitionSS = auto()
     SERequirement = auto()
-    ScoreReport = auto()
 
 
 DetailMsgType = TypeVar('DetailMsgType', bound=MsgType)  # MsgType的所有子类，用于类型注解

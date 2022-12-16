@@ -34,7 +34,7 @@ MSG_TYPE_INFO = {
     DataMsg.SignalPhaseAndTiming: _MsgProperty('MECCloud/1/SPAT', 0x18),  # SPAT和BSM原来1均在末位，此处进行调整
     DataMsg.TrafficFlow: _MsgProperty('MECCloud/1/TrafficFlow', 0x25),
     DataMsg.SafetyMessage: _MsgProperty('MECCloud/1/BSM', 0x17),
-    SpecialDataMsg.ScoreReport: _MsgProperty('MECUpload/1/AlgoImageTest', None) # 分数上报
+    OrderMsg.ScoreReport: _MsgProperty('MECUpload/1/AlgoImageTest', None) # 分数上报
 }
 
 MsgInfo = Union[dict, str]  # 从通信获取的message类型为dict or str

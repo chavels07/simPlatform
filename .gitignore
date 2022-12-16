@@ -4,3 +4,5 @@ __pycache__/
 /logs/
 tmp/
 /data/output/
+trajectories.out.xml
+e2*.xml

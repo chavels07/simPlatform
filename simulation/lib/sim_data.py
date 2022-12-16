@@ -70,6 +70,8 @@ class NaiveSimInfoStorage:
         if junction_list is None:
             junction_list = (node.getID() for node in net.getNodes() if node.getType() == 'traffic_light')
 
+        test_node = net.getNode('point93')
+
         junction_veh_cons = {}
         for junction in junction_list:
             junction_veh_con = JunctionVehContainer(junction)

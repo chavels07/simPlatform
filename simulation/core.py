@@ -113,7 +113,7 @@ class SimCore:
         logger.info('仿真开始')
         while traci.simulation.getMinExpectedNumber() >= 0:
             traci.simulationStep(step=step_len)
-            # time.sleep(0.1)  # 临  时加入
+            # time.sleep(0.1)  # 临时加入
 
             current_timestamp = traci.simulation.getTime()
             SimStatus.time_rolling(current_timestamp)
@@ -122,6 +122,7 @@ class SimCore:
 
             # TODO: test
             # self.storage._test()
+            # time.sleep(0.02)
 
             # 周期执行任务
             if len(self.cycle_task_queue):
@@ -155,7 +156,7 @@ class SimCore:
                         if msg_label is not None and success:
                             self.connection.publish(msg_label)
                         end1 = time.time()
-                        print(end1-start2, start2-start1)
+                        print(end1 - start2, start2 - start1)
                 elif top_task.exec_time > SimStatus.sim_time_stamp:
                     break
                 heapq.heappop(self.single_task_queue)
@@ -175,7 +176,8 @@ class SimCore:
         self.step_limit = None
         self.storage.reset()
 
-    def register_task_creator(self, msg_type: DetailMsgType, handler_func: Callable[[Union[dict, str]], Optional[BaseTask]]):
+    def register_task_creator(self, msg_type: DetailMsgType,
+                              handler_func: Callable[[Union[dict, str]], Optional[BaseTask]]):
         """注册从接收的数据转换成任务的处理方法"""
         self.task_create_func[msg_type] = handler_func
 
@@ -209,57 +211,65 @@ class SimCore:
                 self.add_new_task(task)
 
     def activate_spat_publish(self, intersections: List[str] = None, pub_cycle: float = 0.1):
-        """激活仿真SPAT发送功能"""
+        """
+        激活仿真SPAT发送功能
+        Args:
+            intersections: 选定需要发送SPAT的交叉口, 若未提供参数则选中路网所有信控交叉口
+            pub_cycle: SPAT的推送周期
 
-        required_funcs = []
+        Returns:
+
+        """
+
         if intersections is None:
             for ints_id, sc in self.storage.signal_controllers.items():
-                required_funcs.append(sc.create_spat_pub_msg)
+                self.add_new_task(
+                    InfoTask(exec_func=sc.create_spat_pub_msg, cycle_time=pub_cycle, task_name=f'SPAT-{ints_id}'))
         else:
             for ints_id in intersections:
                 sc = self.storage.signal_controllers.get(ints_id)
                 if sc is None:
                     raise ValueError(f'intersection {ints_id} is not in current map')
+                self.add_new_task(
+                    InfoTask(exec_func=sc.create_spat_pub_msg, cycle_time=pub_cycle, task_name=f'SPAT-{ints_id}'))
 
-                required_funcs.append(sc.create_spat_pub_msg)
-
-        self.internal_task_creator.append(partial(_create_info_task, required_funcs, InfoTask, pub_cycle))  # task creator创建发送SPAT的task的函数
-
-    def activate_bsm_publish(self):
+    def activate_bsm_publish(self, pub_cycle: float = 0.1):
         """激活仿真BSM发送功能"""
-        required_funcs = []
+        for junction_id, junction_veh in self.storage.junction_veh_cons.items():
+            self.add_new_task(InfoTask(exec_func=junction_veh.create_bsm_pub_msg, cycle_time=pub_cycle,
+                                       task_name=f'BSM-{junction_id}'))
 
     def activate_traffic_flow_publish(self, pub_cycle: float = 0.1):
-        _task = InfoTask(self.storage.flow_status.create_traffic_flow_pub_msg)
-        self.internal_task_creator.append(partial(_create_single_task, _task, InfoTask, pub_cycle))
+        self.add_new_task(InfoTask(self.storage.flow_status.create_traffic_flow_pub_msg, cycle_time=pub_cycle,
+                                   task_name=f'TrafficFlow'))
 
 
-# 创建task creator时需要借助partial将其包装成一个无传入参数的callable函数
-def _create_info_task(funcs, task_type: Type[BaseTask], cycle_time: float) -> List[BaseTask]:
-    """
-    辅助创建周期性的task，每次调用即可通过传入的funcs重新创建task list
-    Args:
-        funcs: 可产生Task的函数
-        task_type: Task的类型
-        cycle_time: 周期执行的时间
-
-    Returns:
-
-    """
-    return [task_type(func, ) for func in funcs]
-
-
-def _create_single_task(func, task_type: Type[BaseTask], cycle_time: float) -> BaseTask:
-    """
-    辅助创建周期性的task，每次调用后生成一个新的task
-    Args:
-        func: 可产生Task的函数
-        task_type: Task的类型
-
-    Returns:
-
-    """
-    return task_type(func, )
+# 创建task creator时需要借助partial将其包装成一个无传入参数的callable函数(已被cycle_time的重复任务代替)
+# def _create_info_task(funcs, task_type: Type[BaseTask], cycle_time: float) -> List[BaseTask]:
+#     """
+#     辅助创建周期性的task，每次调用即可通过传入的funcs重新创建task list
+#     Args:
+#         funcs: 可产生Task的函数
+#         task_type: Task的类型
+#         cycle_time: 周期执行的时间
+#
+#     Returns:
+#
+#     """
+#     return [task_type(func, ) for func in funcs]
+#
+#
+# def _create_single_task(func, task_type: Type[BaseTask], cycle_time: float) -> BaseTask:
+#     """
+#     辅助创建周期性的task，每次调用后生成一个新的task
+#     Args:
+#         func: 可产生Task的函数
+#         task_type: Task的类型
+#
+#     Returns:
+#
+#     """
+#     return task_type(func, )
 
 
 """测评系统与仿真无关的内容均以事件形式定义(如生成json轨迹文件，发送评分等)，处理事件的函数的入参以关键词参数形式传入，返回值固定为None"""
@@ -331,8 +341,9 @@ def handle_multiple_trajectory_record_event(*args, **kwargs) -> None:
     save_dir = '../data/output'
 
     for junction_id, veh_info in trajectories.items():
-        handle_trajectory_record_event(traj_record_dir=save_dir, veh_info=veh_info)
-        # handle_trajectory_record_event(traj_record_dir=save_dir, docker_name='_'.join(('test1', junction_id)), veh_info=veh_info)
+        # handle_trajectory_record_event(traj_record_dir=save_dir, veh_info=veh_info)
+        handle_trajectory_record_event(traj_record_dir=save_dir, docker_name='_'.join(('test4', junction_id)),
+                                       veh_info=veh_info)
 
     logger.info(f'轨迹记录已保存在{save_dir}')
 
@@ -355,18 +366,18 @@ def handle_eval_apply_event(*args, **kwargs) -> None:
 
     """
 
-    eval_exe_path = kwargs.get('eval_exe_path')  # ../bin/main.exe
-    single_file = kwargs.get('single_file')
-    docker_name = kwargs.get('docker_name')
-    traj_record_dir = kwargs.get('traj_record_dir')  # ../data/trajectory/
-    eval_record_dir = kwargs.get('eval_record_path')  # ../data/evaluation/
+    eval_exe_path = kwargs.get('eval_exe_path', '../bin/main.exe')  # ../bin/main.exe
+    single_file = kwargs.get('single_file', True)
+    docker_name = kwargs.get('docker_name', 'test')
+    traj_record_dir = kwargs.get('traj_record_dir', '../data/output/')  # ../data/trajectory/
+    eval_record_dir = kwargs.get('eval_record_path', '../data/evaluation')  # ../data/evaluation/
     # if eval_record_dir is None:
     #     raise EventArgumentError('apply score event handling requires key-only argument "eval_record"')
     # if docker_name is None:
     #     raise EventArgumentError('apply score event handling requires key-only argument "eval_name"')
 
-    traj_file_path = ''
-    eval_file_path = ''
+    # traj_file_path = ''
+    # eval_file_path = ''
     # 运行测评程序得到eval res
     if single_file:
         traj_file_path = os.path.join(traj_record_dir, docker_name) + '.json'
@@ -396,10 +407,9 @@ def handle_score_report_event(*args, **kwargs) -> None:
         3) docker_name: str docker名 
         4) connection mqtt连接
     """
-    single_file = kwargs.get('single_file')
-    eval_record_dir = kwargs.get('eval_record_dir')
-    docker_name = kwargs.get('docker_name')
-    all_result = {}
+    single_file = kwargs.get('single_file', True)
+    eval_record_dir = kwargs.get('eval_record_dir', '../data/evaluation')
+    docker_name = kwargs.get('docker_name', 'test')
     if single_file:
         path = os.path.join(eval_record_dir, docker_name) + '.json'
         with open(path, 'r') as f:
@@ -424,7 +434,7 @@ def handle_score_report_event(*args, **kwargs) -> None:
         all_result['score'] = float(all_result['score']) / float(eval_count)
         all_result['detail'] = detail
     connection = kwargs.get('connection')
-    connection.publish(PubMsgLabel(all_result, DetailMsgType.ScoreReport, 'json'))
+    connection.publish(PubMsgLabel(all_result, OrderMsg.ScoreReport, 'json'))
 
 
 def initialize_score_prepare():
@@ -531,6 +541,9 @@ class AlgorithmEval:
 
             # 有数据时会才会进入循环
             for msg_type, msg_ in recv_msgs:
+                print(msg_)
                 if msg_type is OrderMsg.Start:
                     self.testing_name = msg_['docker'].split(test_name_split)[-1]  # 获取分割后的最后一部分作为测试名称
                     self.__eval_start_func()
+
+                    self.eval_task_start()

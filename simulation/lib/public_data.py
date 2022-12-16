@@ -24,7 +24,8 @@ class BaseTask:
     仿真中需要执行的任务
     """
 
-    def __init__(self, exec_func: Callable, args: tuple = (), kwargs: dict = None, exec_time: Optional[float] = None, cycle_time: Optional[float] = None):
+    def __init__(self, exec_func: Callable, args: tuple = (), kwargs: dict = None, exec_time: Optional[float] = None,
+                 cycle_time: Optional[float] = None, task_name: str = None):
         """
 
         Args:
@@ -38,6 +39,7 @@ class BaseTask:
         self.kwargs = kwargs if kwargs is not None else {}
         self.exec_time = exec_time if cycle_time is None else 0
         self.cycle_time = cycle_time
+        self.task_name = task_name  # 用于标识任务类型, 建议命名规范为——消息类型-标记符(id)
 
     def execute(self):
         return self.exec_func(*self.args, **self.kwargs)

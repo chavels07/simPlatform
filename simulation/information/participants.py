@@ -225,8 +225,16 @@ def get_vehicle_class(veh_class: str):
 class JunctionVehContainer:
     _net = None
 
+    class _MsgCache:
+        # 用于内部的生成的轨迹或BSM缓存，避免重复调用接口获取数据
+        def __init__(self):
+            self.sm = []
+            self.trajectory = {}
+            self.last_update_time = -1
+
     def __init__(self, junction_id: str):
         self.junction_id = junction_id
+        self.msg_cache = self._MsgCache()
 
     @classmethod
     def load_net(cls, net: sumolib.net.Net):
@@ -239,16 +247,25 @@ class JunctionVehContainer:
         traci.junction.subscribeContext(self.junction_id, tc.CMD_GET_VEHICLE_VARIABLE, region_dis, sub_vars)
 
     def get_vehicle_info(self) -> Tuple[List[dict], Dict[str, dict]]:
+        # 同一时间步且数据已有则直接返回数据
+        _cache = self.msg_cache
+        if _cache.last_update_time == SimStatus.sim_time_stamp and _cache.sm and _cache.trajectory:
+            return _cache.sm, _cache.trajectory
+
+        # 新的时间步清空缓存的数据
+        _cache.sm.clear()
+        _cache.trajectory.clear()
         sub_res: dict = traci.junction.getContextSubscriptionResults(self.junction_id)
 
         node = create_NodeReferenceID(signalized_intersection_name_decimal(self.junction_id)) if sub_res else None
-        safety_msgs, trajectories = [], {}
+        # safety_msgs, trajectories = [], {}
 
         for veh_id, veh_info in sub_res.items():
             veh_id_num = veh_name_from_flow_decimal(veh_id)
             local_x, local_y = veh_info[tc.VAR_POSITION]
             lon, lat = self._net.convertXY2LonLat(local_x, local_y)
 
+            edge_id = '' if 'point' in veh_info[tc.VAR_ROAD_ID] else veh_info[tc.VAR_ROAD_ID]  # 交叉口内部的edge_id为空
             _SafetyMessage = create_SafetyMessage(ptcId=veh_id_num,
                                                   moy=SimStatus.current_moy(),
                                                   secMark=SimStatus.current_timestamp_in_minute(),
@@ -264,7 +281,7 @@ class JunctionVehContainer:
                                                   length=veh_info[tc.VAR_LENGTH],
                                                   acceleration=veh_info[tc.VAR_ACCELERATION],
                                                   classification=get_vehicle_class(veh_info[tc.VAR_VEHICLECLASS]),
-                                                  edge_id=veh_info[tc.VAR_ROAD_ID],
+                                                  edge_id=edge_id,
                                                   lane_id=veh_info[tc.VAR_LANE_ID])
 
             trajectory = create_trajectory(ptcId=veh_id_num,
@@ -278,9 +295,16 @@ class JunctionVehContainer:
                                            direction=veh_info[tc.VAR_ANGLE],
                                            acceleration=veh_info[tc.VAR_ACCELERATION],
                                            classification=get_vehicle_class(veh_info[tc.VAR_VEHICLECLASS]),
-                                           edge_id=veh_info[tc.VAR_ROAD_ID])
-            safety_msgs.append(_SafetyMessage)
-            trajectories[str(veh_id_num)] = trajectory
-        return safety_msgs, trajectories
+                                           edge_id=edge_id)
+            _cache.sm.append(_SafetyMessage)
+            _cache.trajectory[str(veh_id_num)] = trajectory
+            _cache.last_update_time = SimStatus.sim_time_stamp
+            # safety_msgs.append(_SafetyMessage)
+            # trajectories[str(veh_id_num)] = trajectory
+        return _cache.sm, _cache.trajectory
 
+    def create_bsm_pub_msg(self) -> Tuple[bool, PubMsgLabel]:
+        """创建BSM的推送信息"""
+        newly_multiple_bsm, _ = self.get_vehicle_info()
+        return True, PubMsgLabel(newly_multiple_bsm, DataMsg.SafetyMessage, convert_method='flatbuffers', multiple=True)
 
