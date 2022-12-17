@@ -607,8 +607,8 @@ def create_trajectory(ptcId: int,
 def create_TrafficFlowStat(map_element: str,
                            ptc_type: int,
                            veh_type: str,
-                           volume: int,
-                           speed_area: float):
+                           volume: Num,
+                           speed_area: Num):
     speed_area = int(speed_area * 100)
     _MapElement = {'ext_id': map_element}
     _TrafficFlowStat = {
@@ -616,8 +616,8 @@ def create_TrafficFlowStat(map_element: str,
         'map_element_type': 'DE_LaneStatInfo',
         'ptc_type': ptc_type,
         'veh_type': veh_type,
-        'volume': volume,
-        'speed_area': speed_area
+        'volume': int(volume * 100),
+        'speed_area': int(speed_area * 100)
     }  # TrafficFlow暂时只提供流量和区域速度数据
     return _TrafficFlowStat
 
@@ -659,8 +659,8 @@ def signalized_intersection_name_decimal(ints: str) -> int:
         ints_num = MINUS_NUMERIC_PAT.match(ints).group(1)
     else:
         raise ValueError(f'unexpected intersection name: {ints}')
-    # return int(ints_num)
-    return 10  # Temporary
+    return int(ints_num)
+    # return 10  # Temporary
 
 
 def signalized_intersection_name_str(ints: int) -> str:

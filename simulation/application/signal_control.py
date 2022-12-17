@@ -479,4 +479,5 @@ class SignalController:
             new_program_id = self.get_subscribe_info()[tc.TL_CURRENT_PROGRAM] + 1
             updated_logic = traci.trafficlight.Logic(new_program_id, 1, 0, phases=updated_phases_list)
         exec_time = self.get_next_cycle_start()
+        print('create_control')
         return ImplementTask(traci.trafficlight.setProgramLogic, args=(self.tls_id, updated_logic), exec_time=exec_time)

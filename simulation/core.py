@@ -14,7 +14,7 @@ from collections import OrderedDict, defaultdict
 from datetime import datetime
 from enum import Enum, auto
 from functools import partial
-from typing import List, Dict, Optional, Callable, Union, Sequence, Type
+from typing import List, Dict, Optional, Callable, Union, Sequence, Iterable
 
 from simulation.lib.common import logger, singleton, timer
 from simulation.lib.public_conn_data import DataMsg, OrderMsg, SpecialDataMsg, DetailMsgType, PubMsgLabel
@@ -78,7 +78,7 @@ class SimCore:
             sumoCmd.extend(['-a', detector_fp])
         traci.start(sumoCmd)
         self.step_limit = step_limit
-        self.storage.quick_init_update_execute(self.net)
+        self.storage.quick_init_update_execute(self.net, {'point81'})  # TODO: fixed
 
         # 运行仿真后添加订阅消息
         self.storage.initialize_sub_after_start()
@@ -134,15 +134,14 @@ class SimCore:
                         heapq.heappush(self.cycle_task_queue, top_task)
                         top_task = self.cycle_task_queue[0]
                 while top_task.exec_time == SimStatus.sim_time_stamp:
-                    print(id(top_task))
                     success, msg_label = top_task.execute()
                     if msg_label is not None and success:
                         self.connection.publish(msg_label)
                     top_task.exec_time = round(top_task.cycle_time + top_task.exec_time, 3)  # 防止浮点数运算时精度损失
+
                     heapq.heappop(self.cycle_task_queue)
                     heapq.heappush(self.cycle_task_queue, top_task)
                     top_task = self.cycle_task_queue[0]
-                    print(id(top_task))
 
             start = time.time()
             # 单次执行任务
@@ -199,7 +198,7 @@ class SimCore:
 
             new_task = handler_func(msg_info)
             if new_task is not None:
-                self.implement_tasks[...] = ...  # TODO: 如何放入任务池中
+                self.add_new_task(new_task)  # TODO: 如何放入任务池中
 
     def handle_internal_tasks(self):
         """执行仿真内部需要执行的任务，由于task执行之后马上会被卸载，因此需要提供重复创建task的函数"""
@@ -241,7 +240,8 @@ class SimCore:
             self.add_new_task(InfoTask(exec_func=junction_veh.create_bsm_pub_msg, cycle_time=pub_cycle,
                                        task_name=f'BSM-{junction_id}'))
 
-    def activate_traffic_flow_publish(self, pub_cycle: float = 0.1):
+    def activate_traffic_flow_publish(self, pub_cycle: float = 60):
+        # TODO: 数据不对齐
         self.add_new_task(InfoTask(self.storage.flow_status.create_traffic_flow_pub_msg, cycle_time=pub_cycle,
                                    task_name=f'TrafficFlow'))
 

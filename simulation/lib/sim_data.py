@@ -83,17 +83,17 @@ class NaiveSimInfoStorage:
         for update_func in self.update_module_method:
             update_func()
 
-    def quick_init_update_execute(self, net: sumolib.net.Net, links: Set[str] = None):
+    def quick_init_update_execute(self, net: sumolib.net.Net, nodes: Set[str] = None):
         """
         快速初始化每一步对sim_data数据更新需要执行的函数
         Args:
             net: 地图文件
-            links: 选定的links
+            nodes: 选定的nodes
 
         Returns:
 
         """
-        self.flow_status.initialize_counter(net, links)
+        self.flow_status.initialize_counter(net, nodes)
         self.update_module_method.append(self.flow_status.flow_update_task())
         self.update_module_method.append(self.record_trajectories_update_task())
 
@@ -109,7 +109,7 @@ class NaiveSimInfoStorage:
 
         if self.junction_veh_cons is not None:
             for jun_veh in self.junction_veh_cons.values():
-                jun_veh.subscribe_info()
+                jun_veh.subscribe_info(region_dis=45)
 
     def create_signal_update_task(self, signal_scheme: dict) -> Optional[ImplementTask]:
         node = signal_scheme.get('node_id')

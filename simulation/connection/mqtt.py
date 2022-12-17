@@ -71,7 +71,7 @@ class MQTTConnection:
         """
         self.__sub_thread = SubClientThread(broker, port, topics)
         self.__pub_client = PubClient(broker, port)
-        # self.__sub_thread.start()
+        self.__sub_thread.start()
         self.state = True
 
 
@@ -128,11 +128,13 @@ VALID_TOPIC = {item.topic_name: (short_name, item.fb_code) for short_name, item 
 def on_message(client, user_data, msg: MQTTMessage):
     short_topic, msg_type_code = VALID_TOPIC.get(msg.topic)
     if short_topic is not None:
-        msg_len = msg.payload.find(0x00)
-        msg_value = msg.payload[:msg_len] if msg_len > 0 else msg.payload
+        # msg_len = msg.payload.find(0x00)
+        # msg_value = msg.payload[:msg_len] if msg_len > 0 else msg.payload
+        msg_value = msg.payload
         # type code为None时表示直接传json而不是FB
         if msg_type_code is not None:
             success, msg_value = fb_converter.fb2json(msg_type_code, msg_value)
+            msg_value = msg_value.strip(str(b'\x00', encoding='utf-8'))  # 去取末尾多余的0
             if success != 0:
                 logger.warn(f'fb2json error occurs when receiving message, '
                             f'msg type: {short_topic.name()}, error code: {success}, msg body: {msg_value}')
@@ -140,6 +142,7 @@ def on_message(client, user_data, msg: MQTTMessage):
         else:
             msg_value = msg_value.decode('utf-8')
         msg_ = json.loads(msg_value)  # json 转换成 dict
+        print(msg_)
         MessageTransfer.append(short_topic, msg_)
 
     # # 交通事件主题
@@ -244,24 +247,30 @@ class PubClient:
     @timer
     def publish(self, msg_label: PubMsgLabel):
         target_topic, fb_code = MSG_TYPE_INFO.get(msg_label.msg_type)
-        if msg_label.convert_method == 'flatbuffers':
+        if msg_label.multiple:
+            for single_msg in msg_label.raw_msg:
+                self.publish_single_msg(single_msg, msg_label.msg_type, msg_label.convert_method, fb_code, target_topic)
+        else:
+            self.publish_single_msg(msg_label.raw_msg, msg_label.msg_type, msg_label.convert_method, fb_code, target_topic)
+
+    def publish_single_msg(self, raw_msg, msg_type: DetailMsgType, convert_method: str, fb_code, target_topic: str):
+        if convert_method == 'flatbuffers':
             if fb_code is None:
-                raise ValueError(f'no flatbuffers structure for msg type {msg_label.msg_type}')
-            _msg = json.dumps(msg_label.raw_msg).encode('utf-8')
+                raise ValueError(f'no flatbuffers structure for msg type {msg_type}')
+            _msg = json.dumps(raw_msg).encode('utf-8')
 
             # print(_msg)
 
             success, _msg = fb_converter.json2fb(fb_code, _msg)
             if success != 0:
                 logger.warn(f'json2fb error occurs when sending message, '
-                            f'msg type: {msg_label.msg_type}, error code: {success}, msg body: {msg_label.raw_msg}')
+                            f'msg type: {msg_type}, error code: {success}, msg body: {raw_msg}')
                 return None
-        elif msg_label.convert_method == 'json':
-            _msg = json.dumps(msg_label.raw_msg)
-        elif msg_label.convert_method == 'raw':
-            _msg = msg_label.raw_msg
+        elif convert_method == 'json':
+            _msg = json.dumps(raw_msg)
+        elif convert_method == 'raw':
+            _msg = raw_msg
         else:
-            raise ValueError(f'cannot handle convert type: {msg_label.convert_method}')
+            raise ValueError(f'cannot handle convert type: {convert_method}')
 
         self._publish(target_topic, _msg)
-

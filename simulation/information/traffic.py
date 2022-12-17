@@ -36,24 +36,23 @@ class Flow:
         self.flow_counter: Dict[str, FlowCounter] = {}
         self.detector_location: Dict[str, List[str]] = {}  # 记录检测器与交叉口的关联关系
 
-    def initialize_counter(self, net: sumolib.net.Net, links: Set[str] = None):
+    def initialize_counter(self, net: sumolib.net.Net, nodes: Set[str] = None):
         """
         初始化车辆计数检测器
         Args:
             net: 路网信息
-            links: 如给定links则只更新所选link上的检测器状态和发送TrafficFlow
+            nodes: 如给定nodes则只更新所选link上的检测器状态和发送TrafficFlow
 
         Returns:
 
         """
-        filter_flag = True if links is not None else False
         for detector_id in traci.lanearea.getIDList():
             lane_id = traci.lanearea.getLaneID(detector_id)
             lane: sumolib.net.lane.Lane = net.getLane(lane_id)
             edge: sumolib.net.edge.Edge = lane.getEdge()
-            edge_id = edge.getID()
+            # edge_id = edge.getID()
             intersection_id = edge.getToNode().getID()
-            if filter_flag and edge_id not in links:
+            if nodes is not None and intersection_id not in nodes:
                 continue
 
             # 订阅经过的车辆id,平均速度
@@ -75,6 +74,8 @@ class Flow:
         this_step_vehicles = set(sub_res[tc.LAST_STEP_VEHICLE_ID_LIST])
         new_arrivals = this_step_vehicles - detector_counter.last_vehicles_set
         detector_counter.flow_storage += len(new_arrivals)
+        # detector_counter.last_vehicles_set = detector_counter.last_vehicles_set | this_step_vehicles
+        detector_counter.last_vehicles_set.update(new_arrivals)
         detector_counter.mean_speed = sub_res[tc.LAST_STEP_MEAN_SPEED]
 
     def get_flow(self, detector: str) -> Tuple[int, float]:
@@ -98,7 +99,7 @@ class Flow:
         detector_counter.reset()  # 重置记录时间和流量记录
         return flow_fixed_period, period
 
-    def create_traffic_flow_pub_msg(self) -> PubMsgLabel:
+    def create_traffic_flow_pub_msg(self) -> Tuple[bool, PubMsgLabel]:
         """
         创建TrafficFlow推送消息，
         Args:
@@ -109,7 +110,7 @@ class Flow:
         """
         tf_msgs = []
         timestamp = SimStatus.current_real_timestamp()
-        for node_id, detectors_in_node in  self.detector_location.items():
+        for node_id, detectors_in_node in self.detector_location.items():
             node = create_NodeReferenceID(signalized_intersection_name_decimal(node_id))
             tf_stats = []
             period = 0
@@ -118,13 +119,15 @@ class Flow:
                 flow_fixed_period, period = self.get_flow(detector_id)
                 if flow_fixed_period < 0:
                     continue  # 获取流量数据失败
+                hourly_volume = flow_fixed_period / period * 3600
+                mean_speed = detector.mean_speed if detector.mean_speed > 0 else 0
                 tf_stat = create_TrafficFlowStat(map_element=detector.lane_id,
                                                  ptc_type=1,
                                                  veh_type="passenger_Vehicle_TypeUnknown",
-                                                 volume=flow_fixed_period,
-                                                 speed_area=detector.mean_speed)
+                                                 volume=hourly_volume,
+                                                 speed_area=mean_speed)
                 tf_stats.append(tf_stat)
-            stat_type = {'interval': period}
+            stat_type = {'interval': int(period)}
             if tf_stats:
                 traffic_flow = create_TrafficFlow(node=node,
                                                   gen_time=timestamp,
@@ -133,7 +136,7 @@ class Flow:
                                                   stats=tf_stats)
                 tf_msgs.append(traffic_flow)
 
-        return PubMsgLabel(tf_msgs, DataMsg.TrafficFlow, convert_method='flatbuffers', multiple=True)
+        return True, PubMsgLabel(tf_msgs, DataMsg.TrafficFlow, convert_method='flatbuffers', multiple=True)
 
     def flow_update_task(self) -> Callable[[], None]:
         """创建在每次仿真时更新所有检测器所在路段流量的任务，返回可调用函数"""

@@ -265,7 +265,8 @@ class JunctionVehContainer:
             local_x, local_y = veh_info[tc.VAR_POSITION]
             lon, lat = self._net.convertXY2LonLat(local_x, local_y)
 
-            edge_id = '' if 'point' in veh_info[tc.VAR_ROAD_ID] else veh_info[tc.VAR_ROAD_ID]  # 交叉口内部的edge_id为空
+            edge_id = '' if 'point' in veh_info[tc.VAR_ROAD_ID] or 'J' in veh_info[tc.VAR_ROAD_ID]\
+                else veh_info[tc.VAR_ROAD_ID]  # 交叉口内部的edge_id为空
             _SafetyMessage = create_SafetyMessage(ptcId=veh_id_num,
                                                   moy=SimStatus.current_moy(),
                                                   secMark=SimStatus.current_timestamp_in_minute(),
