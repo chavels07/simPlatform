@@ -461,13 +461,13 @@ class SignalController:
                         logger.info(f'movement {movement} is not defined in intersection {self.ints_id}')
 
                     movement_indexes.append(int(movement))
-                # TODO: 检查link index 开始命名编号是0还是1
+                # TODO: MAP中movement index是1开头，需要寻求movement_index与link_index的映射
                 green_state = ''.join(
-                    TLStatus.GREEN.name if index in movement_indexes else TLStatus.RED.name for index in
-                    range(len(self.conn_info)))
+                    TLStatus.GREEN.value if index in movement_indexes else TLStatus.RED.value for index in
+                    range(1, len(self.conn_info) + 1))
                 yellow_state = ''.join(
-                    TLStatus.YELLOW.name if index in movement_indexes else TLStatus.RED.name for index in
-                    range(len(self.conn_info)))
+                    TLStatus.YELLOW.value if index in movement_indexes else TLStatus.RED.value for index in
+                    range(1, len(self.conn_info) + 1))
 
                 updated_phases_list.append(traci.trafficlight.Phase(green, green_state))
                 updated_phases_list.append(traci.trafficlight.Phase(yellow, yellow_state))
@@ -476,8 +476,13 @@ class SignalController:
                     all_red_state = 'r' * len(self.conn_info)
                     updated_phases_list.append(traci.trafficlight.Phase(all_red, all_red_state))
 
-            new_program_id = self.get_subscribe_info()[tc.TL_CURRENT_PROGRAM] + 1
-            updated_logic = traci.trafficlight.Logic(new_program_id, 1, 0, phases=updated_phases_list)
-        exec_time = self.get_next_cycle_start()
-        print('create_control')
-        return ImplementTask(traci.trafficlight.setProgramLogic, args=(self.tls_id, updated_logic), exec_time=exec_time)
+            new_program_id = int(self.get_subscribe_info()[tc.TL_CURRENT_PROGRAM]) + 1
+            updated_logic = traci.trafficlight.Logic(str(new_program_id), 0, 0, phases=updated_phases_list)
+        exec_time = self.get_next_cycle_start() + SimStatus.sim_time_stamp
+        logger.info(f'signal update task of junction {self.ints_id} created')
+        return ImplementTask(self._inner_set_program_logic, args=(self.tls_id, updated_logic), exec_time=exec_time)
+
+    @staticmethod
+    def _inner_set_program_logic(tls_id, updated_logic):
+        traci.trafficlight.setProgramLogic(tls_id, updated_logic)
+        return True, None

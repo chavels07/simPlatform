@@ -3,6 +3,7 @@
 # @File        : public_data.py
 # @Description : 存放不仅用于仿真内部，也可用在其他环节所需的数据结构
 
+import math
 import re
 import time
 import weakref
@@ -38,7 +39,7 @@ class BaseTask:
         self.exec_func = exec_func
         self.args = args
         self.kwargs = kwargs if kwargs is not None else {}
-        self.exec_time = exec_time if cycle_time is None else 0
+        self.exec_time = exec_time if cycle_time is None else cycle_time
         self.cycle_time = cycle_time
         self.task_name = task_name  # 用于标识任务类型, 建议命名规范为——消息类型-标记符(id)
 
@@ -47,8 +48,8 @@ class BaseTask:
 
     def __lt__(self, task):
         if self.exec_time is None:
-            return -1
-        return self.exec_time - task.exec_time
+            return True
+        return task.exec_time > self.exec_time
 
 
 class ImplementTask(BaseTask):
@@ -515,7 +516,6 @@ def create_SafetyMessage(ptcId: int,
     _SafetyMessage = {
         'ptcType': 1,
         'ptcId': ptcId,
-        'obuId': obuId,
         'source': 1,
         'device': [1],
         'moy': moy,
@@ -542,7 +542,10 @@ def create_SafetyMessage(ptcId: int,
             'headingCfd': 'prec0_01deg'
         },
         'accelSet': {
-            "long": int(acceleration / 0.01)
+            'lon': int(acceleration / 0.01),  # 沿车辆前进方向
+            'lat': 0,
+            'vert': 0,
+            'yaw': 0
         },
         'size': {
             'width': int(width * 100),
@@ -554,6 +557,9 @@ def create_SafetyMessage(ptcId: int,
         'section_ext_id': edge_id,
         'lane_ext_id': lane_id
     }
+
+    if obuId is not None:
+        _SafetyMessage['obuId'] = obuId,
     return _SafetyMessage
 
 

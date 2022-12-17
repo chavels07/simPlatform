@@ -119,10 +119,11 @@ class SimCore:
             SimStatus.time_rolling(current_timestamp)
             self.storage.update_storage()  # 执行storage更新任务
             self.handle_internal_tasks()  # 内部需要在每次仿真步运行时，可能需要创建的任务
+            self.handle_current_msg()  # 处理接收到的数据类消息，转化成控制任务
 
             # TODO: test
             # self.storage._test()
-            # time.sleep(0.02)
+            # time.sleep(0.2)
 
             # 周期执行任务
             if len(self.cycle_task_queue):
