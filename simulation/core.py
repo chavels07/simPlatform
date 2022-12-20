@@ -37,17 +37,18 @@ import traci
 class SimCore:
     """仿真主体"""
 
-    def __init__(self, sumo_cfg_fp: str, network_fp: str = None, arterial_storage: bool = False):
+    def __init__(self, sumo_cfg_fp: str, network_fp: str = None, arterial_storage: bool = False, signalized: bool = True):
         """
 
         Args:
             sumo_cfg_fp: sumo cfg文件路径
             network_fp: 路网文件路径
             arterial_storage:
+            signalized: 是否存在信号灯
         """
         self._cfg_fp = sumo_cfg_fp
         self._net_fp = network_fp
-        self.net = sumolib.net.readNet(network_fp, withLatestPrograms=True)  # 路网对象化数据
+        self.net = sumolib.net.readNet(network_fp, withLatestPrograms=True) if signalized else sumolib.net.readNet(network_fp) # 路网对象化数据
         self.connection = MQTTConnection()  # 通信接口实现数据外部交互
         self.step_limit = None  # 默认限制仿真运行时间, None为无限制
         self.storage = ArterialSimInfoStorage() if arterial_storage else NaiveSimInfoStorage()  # 仿真部分数据存储
@@ -111,6 +112,7 @@ class SimCore:
 
         """
         logger.info('仿真开始')
+        bsm_log = []
         while traci.simulation.getMinExpectedNumber() >= 0:
             traci.simulationStep(step=step_len)
             # time.sleep(0.1)  # 临时加入
@@ -163,10 +165,14 @@ class SimCore:
                     break
                 heapq.heappop(self.single_task_queue)
 
+            bsms, _ = self.storage.junction_veh_cons['31011410002'].get_vehicle_info()
+            bsm_log.extend(bsms)
             end = time.time()
             # print(f'execute task consume time {end - start}')
 
             if self.step_limit is not None and current_timestamp > self.step_limit:
+                with open(r'../data/tmp/display/bsm.json', 'w') as f:
+                    json.dump(bsm_log, f, indent=2)
                 break  # 完成仿真任务提前终止仿真程序
 
         logger.info('仿真结束')
@@ -447,8 +453,9 @@ def initialize_score_prepare():
 @singleton
 class AlgorithmEval:
     def __init__(self, cfg_fp: str = '../data/network/anting.sumocfg',
-                 network_fp: str = '../data/network/anting.net.xml'):
-        self.sim = SimCore(cfg_fp, network_fp, arterial_storage=True)
+                 network_fp: str = '../data/network/anting.net.xml',
+                 signalized: bool = True):
+        self.sim = SimCore(cfg_fp, network_fp, arterial_storage=True, signalized=signalized)
         self.testing_name: str = 'No test'
         self.eval_record: Dict[str, dict] = {}
         self.__eval_start_func: Optional[Callable[[], None]] = None

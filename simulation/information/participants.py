@@ -241,7 +241,7 @@ class JunctionVehContainer:
         """加载JunctionVehContainer的路网"""
         cls._net = net
 
-    def subscribe_info(self, region_dis: int = 100):
+    def subscribe_info(self, region_dis: int = 200):
         sub_vars = [tc.VAR_POSITION, tc.VAR_SPEED, tc.VAR_ACCELERATION, tc.VAR_ANGLE, tc.VAR_LENGTH, tc.VAR_WIDTH,
                     tc.VAR_HEIGHT, tc.VAR_VEHICLECLASS, tc.VAR_ROAD_ID, tc.VAR_LANE_ID, tc.VAR_LANE_INDEX]
         traci.junction.subscribeContext(self.junction_id, tc.CMD_GET_VEHICLE_VARIABLE, region_dis, sub_vars)
@@ -257,7 +257,7 @@ class JunctionVehContainer:
         _cache.trajectory.clear()
         sub_res: dict = traci.junction.getContextSubscriptionResults(self.junction_id)
 
-        node = create_NodeReferenceID(signalized_intersection_name_decimal(self.junction_id)) if sub_res else None
+        node = create_NodeReferenceID(int(self.junction_id[:4])) if sub_res else None
         # safety_msgs, trajectories = [], {}
 
         for veh_id, veh_info in sub_res.items():
