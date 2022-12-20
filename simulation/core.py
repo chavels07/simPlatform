@@ -52,7 +52,7 @@ class SimCore:
         self.step_limit = None  # 默认限制仿真运行时间, None为无限制
         self.storage = ArterialSimInfoStorage() if arterial_storage else NaiveSimInfoStorage()  # 仿真部分数据存储
         # 允许创建任务的函数返回一系列任务或单个任务，目的是为了保证不同类型的task creator函数只有单个
-        self.internal_task_creator: List[Callable[[], Union[Sequence[BaseTask], BaseTask]]] = []
+        # self.internal_task_creator: List[Callable[[], Union[Sequence[BaseTask], BaseTask]]] = []
         self.task_create_func: Dict[DetailMsgType, Callable[[Union[dict, str]], Optional[BaseTask]]] = {}
         self.cycle_task_queue: List[BaseTask] = []
         self.single_task_queue: List[BaseTask] = []
@@ -118,7 +118,7 @@ class SimCore:
             current_timestamp = traci.simulation.getTime()
             SimStatus.time_rolling(current_timestamp)
             self.storage.update_storage()  # 执行storage更新任务
-            self.handle_internal_tasks()  # 内部需要在每次仿真步运行时，可能需要创建的任务
+            # self.handle_internal_tasks()  # 内部需要在每次仿真步运行时，可能需要创建的任务
             self.handle_current_msg()  # 处理接收到的数据类消息，转化成控制任务
 
             # TODO: test
@@ -195,22 +195,21 @@ class SimCore:
         for msg_type, msg_info in self.connection.loading_msg(DataMsg):
             handler_func = self.task_create_func.get(msg_type)
             if handler_func is None:
-                pass  # 不处理
+                pass  # TODO: 不处理
 
             new_task = handler_func(msg_info)
             if new_task is not None:
-                self.add_new_task(new_task)  # TODO: 如何放入任务池中
+                self.add_new_task(new_task)
 
-    def handle_internal_tasks(self):
-        """执行仿真内部需要执行的任务，由于task执行之后马上会被卸载，因此需要提供重复创建task的函数"""
-        # TODO: cycle task 已经不会被卸载
-        for creator_function in self.internal_task_creator:
-            task = creator_function()
-            if isinstance(task, Sequence):
-                for single_task in task:
-                    self.add_new_task(single_task)
-            else:
-                self.add_new_task(task)
+    # def handle_internal_tasks(self):
+    #     """执行仿真内部需要执行的任务，由于task执行之后马上会被卸载，因此需要提供重复创建task的函数"""
+    #     for creator_function in self.internal_task_creator:
+    #         task = creator_function()
+    #         if isinstance(task, Sequence):
+    #             for single_task in task:
+    #                 self.add_new_task(single_task)
+    #         else:
+    #             self.add_new_task(task)
 
     def activate_spat_publish(self, intersections: List[str] = None, pub_cycle: float = 0.1):
         """
@@ -242,7 +241,6 @@ class SimCore:
                                        task_name=f'BSM-{junction_id}'))
 
     def activate_traffic_flow_publish(self, pub_cycle: float = 60):
-        # TODO: 数据不对齐
         self.add_new_task(InfoTask(self.storage.flow_status.create_traffic_flow_pub_msg, cycle_time=pub_cycle,
                                    task_name=f'TrafficFlow'))
 
@@ -322,8 +320,6 @@ def handle_trajectory_record_event(*args, **kwargs) -> None:
                   4) traj_record_dir: str 轨迹数据存储路径 5) veh_info: dict 字典
 
     """
-    veh_info = {}
-    # TODO: get vehicle info
 
     traj_record_dir = kwargs.get('traj_record_dir', '../data/output')  # 目录赞写死
     docker_name = kwargs.get('docker_name', 'test')

@@ -226,7 +226,7 @@ def create_Phasic(phase_id: int,
         'id': phase_id,
         'order': order,
         'scat_no': scat_no,
-        'movements': movements,
+        'conn_index_info': movements,
         'green': green,
         'yellow': yellow,
         'allred': all_red,
@@ -245,7 +245,7 @@ def create_SignalScheme(scheme_id: int,
                         min_cycle: int,
                         max_cycle: int,
                         base_signal_scheme_id: int,
-                        offset: int,
+                        offset: float,
                         phases: List[dict]) -> dict:
     _SignalScheme = {
         'scheme_id': scheme_id,
@@ -256,7 +256,7 @@ def create_SignalScheme(scheme_id: int,
         'min_cycle': min_cycle,
         'max_cycle': max_cycle,
         'base_signal_scheme_id': base_signal_scheme_id,
-        'offset': offset,
+        'offset': int(offset),
         'phases': phases
     }
     return _SignalScheme
@@ -399,7 +399,7 @@ def create_PhasicExec(phasic_id: int,
     _PhasicExec = {
         'phasic_id': phasic_id,
         'order': order,
-        'movements': movements,
+        'conn_index_info': movements,
         'green': int(green),
         'yellow': int(yellow),
         'allred': int(allred)

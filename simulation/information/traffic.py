@@ -31,6 +31,7 @@ class FlowCounter:
         self.record_start_time = None
 
 
+# TODO: traffic flow改为从trajectory里面去读取
 class Flow:
     def __init__(self):
         self.flow_counter: Dict[str, FlowCounter] = {}

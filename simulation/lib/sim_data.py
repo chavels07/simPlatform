@@ -97,10 +97,6 @@ class NaiveSimInfoStorage:
         self.update_module_method.append(self.flow_status.flow_update_task())
         self.update_module_method.append(self.record_trajectories_update_task())
 
-        # TODO: only for test
-        # for sc in self.signal_controllers.values():
-        #     self.update_module_method.append(sc.get_current_spat)
-
     def initialize_sub_after_start(self):
         """调用start建立traci连接后为traffic_light添加订阅"""
         if self.signal_controllers is not None:

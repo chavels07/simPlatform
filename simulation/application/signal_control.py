@@ -13,6 +13,7 @@ import traci
 import traci.constants as tc
 
 from simulation.lib.common import logger
+from simulation.lib.net_tool import JunctionConns, entry_movement_sorted
 from simulation.lib.public_conn_data import PubMsgLabel, DataMsg
 from simulation.lib.public_data import (create_Phasic, create_SignalScheme, create_NodeReferenceID,
                                         create_DateTimeFilter, create_TimeCountingDown, create_PhaseState, create_Phase,
@@ -27,15 +28,6 @@ class TLStatus(Enum):
 
     def lower_name(self):
         return self.name.lower()
-
-
-class Turn(Enum):
-    STRAIGHT = 's'
-    LEFT = 'l'
-    RIGHT = 'r'
-    TURN = 't'
-    PARTIALLY_LEFT = 'L'
-    PARTIALLY_RIGHT = 'R'
 
 
 class EasyPhaseTiming:
@@ -164,7 +156,6 @@ class SignalController:
     def __init__(self, ints_id: str):
         self.ints_id = ints_id
         self.tls_id, self.conn_info = self.__ints_tl_mapping_from_connection()  # traffic light id, 交叉口内部连接转向，进口道信息
-        # self.tls_controller: sumolib.net.TLS = self._net.getTLS(self.tls_id)
 
     @classmethod
     def load_net(cls, net: sumolib.net.Net):
@@ -176,21 +167,35 @@ class SignalController:
         traci.trafficlight.subscribe(self.tls_id, (tc.TL_CURRENT_PROGRAM, tc.TL_CURRENT_PHASE,
                                                    tc.TL_NEXT_SWITCH, tc.TL_COMPLETE_DEFINITION_RYG))
 
-    def __ints_tl_mapping_from_connection(self) -> Tuple[str, Dict[int, ConnInfo]]:
-        """从connection建立交叉口id和信号灯id的映射，能应对id不直接相当的情况"""
+    def __ints_tl_mapping_from_connection(self) -> Tuple[str, JunctionConns]:
+        """
+        从connection建立交叉口id和信号灯id的映射，能应对id不直接相当的情况
+        Returns: 交叉口信号控制id，connection的信息
+
+        See Also: https://sumo.dlr.de/docs/Simulation/Traffic_Lights.html#defining_signal_groups
+
+        """
         node: sumolib.net.node.Node = self._net.getNode(self.ints_id)
         connections: List[sumolib.net.Connection] = node.getConnections()
         assert len(connections)
         any_connection = connections[0]
         tls_id = any_connection.getTLSID()
+        if self.ints_id == 'point81':
+            print(1)
+        mov_conn_mapping = entry_movement_sorted(connections, node)
 
-        conn_info = {}
-        for conn in connections:
-            link_index = conn.getTLLinkIndex()
-            from_edge = conn.getFrom()
-            turn = Turn(conn.getDirection())
-            conn_info[link_index] = ConnInfo(turn=turn, from_edge=from_edge)
-        return tls_id, conn_info
+        # 按照link index排序，此后可以按照edge变化来判断movement
+        # connections = sorted(connections, key=lambda x: x.getTLLinkIndex())
+
+        # conn_index_info = {}  # 交叉口连接道路的信息
+        #
+        #
+        # for conn in connections:
+        #     link_index = conn.getTLLinkIndex()
+        #     from_edge = conn.getFrom()
+        #     turn = Turn(conn.getDirection())
+        #     conn_index_info[link_index] = ConnInfo(turn=turn, from_edge=from_edge)
+        return tls_id, mov_conn_mapping
 
     # @SimStatus.cache_property  # 似乎使用速度会慢一些
     def get_subscribe_info(self) -> Dict[int, Any]:
@@ -199,13 +204,15 @@ class SignalController:
 
     def get_current_signal_scheme(self) -> dict:
         """获取当前交叉口的信号控制方案"""
-        current_program_id = self.get_subscribe_info()[tc.TL_CURRENT_PROGRAM]
+        sub_info = self.get_subscribe_info()
+        current_program_id = sub_info[tc.TL_CURRENT_PROGRAM]
         curr_logic = self.get_current_logic()
         local_phases: List[traci.trafficlight.Phase] = curr_logic.getPhases()
         gather_phases, movements = phase_gather(local_phases)  # 按照相位传统定义(车流控制)从SUMO中的相位中进行集合转换处理
         assert len(gather_phases) == len(movements), \
             f'phase count is not equivalent to movement group count in intersection {self.ints_id}'
 
+        offset = traci.trafficlight.getParameter(self.tls_id, 'offset')
         phases = []
         cycle_length = 0
         for index, (timing, mov) in enumerate(zip(gather_phases, movements), start=1):
@@ -231,8 +238,8 @@ class SignalController:
                                             min_cycle=cycle_length,
                                             max_cycle=cycle_length,
                                             base_signal_scheme_id=current_program_id,
-                                            offset=0,
-                                            phases=phases)  # TODO: offset
+                                            offset=offset,
+                                            phases=phases)
         return signal_scheme
 
     def get_current_signal_execution(self) -> dict:
@@ -455,20 +462,39 @@ class SignalController:
                 if green is None or yellow is None:
                     logger.info('green or yellow argument missed, cannot create control')
                     return None
-                movement_indexes = []
+
+                connection_indexes = []
                 for movement in movements:
-                    if not movement.isnumeric() or int(movement) not in self.conn_info:
+                    if not movement.isnumeric():
                         logger.info(f'movement {movement} is not defined in intersection {self.ints_id}')
-
-                    movement_indexes.append(int(movement))
+                    conn_res = self.conn_info.get_movement_connections(int(movement))
+                    if conn_res is None:
+                        logger.warn(f'Movement {movement} not in junction {self.ints_id}')
+                        continue
+                    connection_indexes.extend(conn_res)
+                print(connection_indexes)
+                ####
+                # movement_indexes = []
+                # for movement in movements:
+                #     if not movement.isnumeric() or int(movement) not in self.conn_index_info:
+                #         logger.info(f'movement {movement} is not defined in intersection {self.ints_id}')
+                #
+                #     movement_indexes.append(int(movement))
                 # TODO: MAP中movement index是1开头，需要寻求movement_index与link_index的映射
-                green_state = ''.join(
-                    TLStatus.GREEN.value if index in movement_indexes else TLStatus.RED.value for index in
-                    range(1, len(self.conn_info) + 1))
-                yellow_state = ''.join(
-                    TLStatus.YELLOW.value if index in movement_indexes else TLStatus.RED.value for index in
-                    range(1, len(self.conn_info) + 1))
+                # green_state = ''.join(
+                #     TLStatus.GREEN.value if index in movement_indexes else TLStatus.RED.value for index in
+                #     range(1, len(self.conn_index_info) + 1))
+                # yellow_state = ''.join(
+                #     TLStatus.YELLOW.value if index in movement_indexes else TLStatus.RED.value for index in
+                #     range(1, len(self.conn_index_info) + 1))
 
+                # connection和TLS的编号规则有差异，前者是从1开始后者从0开始
+                green_state = ''.join(
+                    TLStatus.GREEN.value if index in connection_indexes else TLStatus.RED.value for index in
+                    range(len(self.conn_info)))
+                yellow_state = ''.join(
+                    TLStatus.YELLOW.value if index in connection_indexes else TLStatus.RED.value for index in
+                    range(len(self.conn_info)))
                 updated_phases_list.append(traci.trafficlight.Phase(green, green_state))
                 updated_phases_list.append(traci.trafficlight.Phase(yellow, yellow_state))
                 all_red = phase.get('allred')
