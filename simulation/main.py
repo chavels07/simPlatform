@@ -18,8 +18,10 @@ if __name__ == '__main__':
 
     # 注册event
     algorithm_eval.auto_initialize_event()
+
+    # algorithm_eval.sim.activate_signal_execution_publish()
     algorithm_eval.sim.activate_spat_publish()
-    algorithm_eval.sim.activate_traffic_flow_publish()
+    # algorithm_eval.sim.activate_traffic_flow_publish()
     algorithm_eval.sim.activate_bsm_publish()
 
     # 欣朋仿真

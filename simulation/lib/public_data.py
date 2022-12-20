@@ -399,7 +399,7 @@ def create_PhasicExec(phasic_id: int,
     _PhasicExec = {
         'phasic_id': phasic_id,
         'order': order,
-        'conn_index_info': movements,
+        'movements': movements,
         'green': int(green),
         'yellow': int(yellow),
         'allred': int(allred)
@@ -419,11 +419,12 @@ def create_SignalExecution(node_id: dict,
         'node_id': node_id,
         'sequence': sequence,
         'control_mode': control_mode,
-        'cycle': cycle,
+        'cycle': int(cycle),
         'base_signal_scheme_id': base_signal_scheme_id,
         'start_time': int(start_time),
         'phases': phases
     }
+    return _SignalExecution
 
 
 # @alltypeassert

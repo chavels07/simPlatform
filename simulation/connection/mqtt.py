@@ -34,7 +34,8 @@ MSG_TYPE_INFO = {
     DataMsg.SignalPhaseAndTiming: _MsgProperty('MECCloud/1/SPAT', 0x18),  # SPAT和BSM原来1均在末位，此处进行调整
     DataMsg.TrafficFlow: _MsgProperty('MECCloud/1/TrafficFlow', 0x25),
     DataMsg.SafetyMessage: _MsgProperty('MECCloud/1/BSM', 0x17),
-    OrderMsg.ScoreReport: _MsgProperty('MECUpload/1/AlgoImageTest', None) # 分数上报
+    DataMsg.SignalExecution: _MsgProperty('MECCloud/1/SignalExecution', 0x30),
+    OrderMsg.ScoreReport: _MsgProperty('MECUpload/1/AlgoImageTest', None)  # 分数上报
 }
 
 MsgInfo = Union[dict, str]  # 从通信获取的message类型为dict or str
@@ -244,7 +245,6 @@ class PubClient:
         if msg_info.rc != 0:
             logger.info(f'fail to send message to topic {topic}, return code: {msg_info.rc}')
 
-    @timer
     def publish(self, msg_label: PubMsgLabel):
         target_topic, fb_code = MSG_TYPE_INFO.get(msg_label.msg_type)
         if msg_label.multiple:
@@ -258,8 +258,6 @@ class PubClient:
             if fb_code is None:
                 raise ValueError(f'no flatbuffers structure for msg type {msg_type}')
             _msg = json.dumps(raw_msg).encode('utf-8')
-
-            # print(_msg)
 
             success, _msg = fb_converter.json2fb(fb_code, _msg)
             if success != 0:

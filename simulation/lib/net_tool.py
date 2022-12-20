@@ -88,11 +88,19 @@ class JunctionConns:
         9: (Direction.NORTH, Turn.RIGHT),
         10: (Direction.WEST, Turn.LEFT),
         11: (Direction.WEST, Turn.STRAIGHT),
-        12: (Direction.WEST, Turn.RIGHT)
+        12: (Direction.WEST, Turn.RIGHT),
+        20: (Direction.SOUTH, Turn.TURN),  # TODO:掉头临时定义，需要确定
+        21: (Direction.EAST, Turn.TURN),
+        22: (Direction.NORTH, Turn.TURN),
+        23: (Direction.WEST, Turn.TURN)
     }
+
+    # movement mapping的逆映射
+    INVERSE_MOVEMENT_MAPPING = {value: key for key, value in MOVEMENT_MAPPING.items()}
 
     def __init__(self):
         self.entries: Dict[Direction, Entry] = defaultdict(Entry)
+        self.movement_of_connection: Dict[int, int] = {}
 
     def __len__(self):
         connection_count = 0
@@ -103,6 +111,11 @@ class JunctionConns:
 
     def add_connection(self, direction: Direction, turn: Turn, conn_idx: int):
         self.entries[direction][turn].append(conn_idx)
+        self.movement_of_connection[conn_idx] = self.INVERSE_MOVEMENT_MAPPING[(direction, turn)]
+
+    def get_connections_movements_str(self, connection_indexes: List[int]) -> List[str]:
+        movement_set = {str(self.movement_of_connection[index]) for index in connection_indexes}
+        return list(movement_set)
 
     def get_movement_connections(self, movement: int) -> Optional[List[int]]:
         res = self.MOVEMENT_MAPPING.get(movement)

@@ -234,6 +234,28 @@ class SimCore:
                 self.add_new_task(
                     InfoTask(exec_func=sc.create_spat_pub_msg, cycle_time=pub_cycle, task_name=f'SPAT-{ints_id}'))
 
+    def activate_signal_execution_publish(self,  intersections: List[str] = None, pub_cycle: float = 0.1):
+        """
+
+        Args:
+            intersections:
+            pub_cycle:
+
+        Returns:
+
+        """
+        if intersections is None:
+            for ints_id, sc in self.storage.signal_controllers.items():
+                self.add_new_task(
+                    InfoTask(exec_func=sc.create_signal_execution_pub_msg, cycle_time=pub_cycle, task_name=f'SignalExe-{ints_id}'))
+        else:
+            for ints_id in intersections:
+                sc = self.storage.signal_controllers.get(ints_id)
+                if sc is None:
+                    raise ValueError(f'intersection {ints_id} is not in current map')
+                self.add_new_task(
+                    InfoTask(exec_func=sc.create_signal_execution_pub_msg, cycle_time=pub_cycle, task_name=f'SignalExe-{ints_id}'))
+
     def activate_bsm_publish(self, pub_cycle: float = 0.1):
         """激活仿真BSM发送功能"""
         for junction_id, junction_veh in self.storage.junction_veh_cons.items():

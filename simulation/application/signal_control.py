@@ -123,12 +123,13 @@ def phase_gather(phases: List[traci.trafficlight.Phase]) -> Tuple[List[EasyPhase
         status = get_phase_status(phase.state)  # 表示各junctionlink的信号放行状态
         if index_ptr is None:
             gather_res.append(EasyPhaseTiming.arbitrary_init(phase.duration, status))
+            state_strings.append(get_related_movement_from_state(phase.state))  # 保存放行的信号控制机的关联状态
             index_ptr = 0
             continue
         if status is TLStatus.GREEN:
             gather_res.append(EasyPhaseTiming(green=phase.duration))
             index_ptr += 1  # 出现绿灯时新增一个相位，指针后移一位
-            state_strings.append(get_related_movement_from_state(phase.state))  # 保存放行的信号控制机的关联状态
+            state_strings.append(get_related_movement_from_state(phase.state))
         elif status is TLStatus.YELLOW:
             gather_res[index_ptr].yellow = phase.duration
         elif status is TLStatus.RED:
@@ -180,8 +181,6 @@ class SignalController:
         assert len(connections)
         any_connection = connections[0]
         tls_id = any_connection.getTLSID()
-        if self.ints_id == 'point81':
-            print(1)
         mov_conn_mapping = entry_movement_sorted(connections, node)
 
         # 按照link index排序，此后可以按照edge变化来判断movement
@@ -254,9 +253,10 @@ class SignalController:
         cycle_length = 0
         phases = []
         for index, (timing, mov) in enumerate(zip(gather_phases, movements), start=1):
+
             phasic_exec = create_PhasicExec(phasic_id=index,
                                             order=index,
-                                            movements=0,
+                                            movements=self.conn_info.get_connections_movements_str(mov),
                                             green=timing.green,
                                             yellow=timing.yellow,
                                             allred=timing.allred)  # TODO: movement怎么和MAP对应，可以按照东西南北的逻辑，但是MAP对不对得齐需要确认
@@ -268,7 +268,7 @@ class SignalController:
                                                   sequence=0,
                                                   control_mode=0,
                                                   cycle=cycle_length,
-                                                  base_signal_scheme_id=current_program_id,
+                                                  base_signal_scheme_id=int(current_program_id),
                                                   start_time=SimStatus.start_real_unix_timestamp(),
                                                   phases=phases)
         return signal_execution
