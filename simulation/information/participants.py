@@ -253,8 +253,8 @@ class JunctionVehContainer:
             return _cache.sm, _cache.trajectory
 
         # 新的时间步清空缓存的数据
-        _cache.sm.clear()
-        _cache.trajectory.clear()
+        _cache.sm = []
+        _cache.trajectory = {}
         sub_res: dict = traci.junction.getContextSubscriptionResults(self.junction_id)
 
         node = create_NodeReferenceID(signalized_intersection_name_decimal(self.junction_id)) if sub_res else None
