@@ -565,48 +565,28 @@ def create_SafetyMessage(ptcId: int,
 
 
 def create_trajectory(ptcId: int,
-                      moy: int,
-                      secMark: float,
                       lat: float,
                       lon: float,
                       node: str,
-                      lane_ref_id: int,
                       speed: float,
                       direction: float,
                       acceleration: float,
-                      classification: str,
-                      edge_id: str,
-                      auto_level: int = 1,
-                      auto_status: int = 1):
-    secMark = int(secMark * 1000)
-    if secMark == 0:
-        secMark += 1  # 避免为0时字段丢失的问题
+                      edge_id: str):
     trajectory = {
-        'ptcType': 1,
-        'ptcId': ptcId,
-        'source': 1,
-        'device': [1],
-        'moy': moy,
-        'secMark': secMark,
-        'timeConfidence': 'time000002',
+        'ptcType': "3",
+        'ptcId': str(ptcId),
         'pos': {
             'lat': int(lat * 1e7),
             'lon': int(lon * 1e7)
         },
-        'laneId': lane_ref_id,
         'speed': int(speed / 0.02),
         'heading': int(direction / 0.0125),
         'accelSet': {
-            "long": int(acceleration / 0.01)
-        },
-        'vehicleClass': {
-            'classification': classification
+            "lon": int(acceleration / 0.01),
+            "lat": 0
         },
         'junction': node,
-        'link': edge_id,
-        'turning': 0,
-        'autoLevel': auto_level,
-        'autoStatus': auto_status
+        'link': edge_id
     }
     return trajectory
 

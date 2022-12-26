@@ -286,16 +286,12 @@ class JunctionVehContainer:
                                                   lane_id=veh_info[tc.VAR_LANE_ID])
 
             trajectory = create_trajectory(ptcId=veh_id_num,
-                                           moy=SimStatus.current_moy(),
-                                           secMark=SimStatus.current_timestamp_in_minute(),
                                            lat=lat,
                                            lon=lon,
                                            node=self.junction_id,
-                                           lane_ref_id=veh_info[tc.VAR_LANE_INDEX],
                                            speed=veh_info[tc.VAR_SPEED],
                                            direction=veh_info[tc.VAR_ANGLE],
                                            acceleration=veh_info[tc.VAR_ACCELERATION],
-                                           classification=get_vehicle_class(veh_info[tc.VAR_VEHICLECLASS]),
                                            edge_id=edge_id)
             _cache.sm.append(_SafetyMessage)
             _cache.trajectory[str(veh_id_num)] = trajectory
