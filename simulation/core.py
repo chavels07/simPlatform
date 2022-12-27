@@ -338,33 +338,31 @@ def handle_trajectory_record_event(*args, **kwargs) -> None:
 
     Args:
         *args:
-        **kwargs: 1) single_file: bool 是否为单个测评 2) docker_name: str docker名 3) sub_name: str 多任务时子任务的文件名
-                  4) traj_record_dir: str 轨迹数据存储路径 5) veh_info: dict 字典
+        **kwargs: 1) docker_name: str docker名 2) sub_name: str 子任务的文件名
+                  3) traj_record_dir: str 轨迹数据存储路径 4) veh_info: dict 字典
 
     """
 
-    traj_record_dir = kwargs.get('traj_record_dir', '../data/output')  # 目录赞写死
+    traj_record_dir = kwargs.get('traj_record_dir', '../data/trajectory')  # 目录赞写死
     docker_name = kwargs.get('docker_name', 'test')
-    single_file = kwargs.get('single_file', True)
+    docker_record_dir = os.path.join(traj_record_dir, docker_name)
+    if not os.path.exists(docker_record_dir):
+        os.mkdir(docker_record_dir)
     veh_info = kwargs.get('veh_info')
-    path = '.json'
-    if single_file:
-        path = '/'.join((traj_record_dir, docker_name)) + path
-    else:
-        sub_name = kwargs.get('sub_name')
-        path = '/'.join((traj_record_dir, docker_name, sub_name)) + path
+    sub_name = kwargs.get('sub_name', docker_name)
+    path = os.path.join((traj_record_dir, docker_name, sub_name)) + '.json'
     with open(path, 'w+') as f:
         json.dump(veh_info, f, indent=2)
 
 
 def handle_multiple_trajectory_record_event(*args, **kwargs) -> None:
     trajectories = kwargs.get('trajectories')
-    save_dir = '../data/output'
+    save_dir = '../data/trajectory'
 
     for junction_id, veh_info in trajectories.items():
         # handle_trajectory_record_event(traj_record_dir=save_dir, veh_info=veh_info)
-        handle_trajectory_record_event(traj_record_dir=save_dir, docker_name='_'.join(('test4', junction_id)),
-                                       veh_info=veh_info)
+        handle_trajectory_record_event(traj_record_dir=save_dir, docker_name = "test4",         
+                                       sub_name='_'.join(('test4', junction_id)), veh_info=veh_info)
 
     logger.info(f'轨迹记录已保存在{save_dir}')
 
@@ -376,22 +374,17 @@ def handle_eval_apply_event(*args, **kwargs) -> None:
         *args:
         **kwargs: required argument: 
         1) eval_exe_path: str 评测exe路径
-        2) single_file: bool 是否为单个测评
-        3) docker_name: str docker名 
-        4) sub_name: str 多任务时子任务的文件名 若为单测评则此项可为空
-        5) traj_record_dir: str 轨迹数据存储路径
-        6) eval_record_dir: str 评测结果存储路径
-        若为单次测评 结果存储于eval_record_dir/docker_name.json
-        若为多测评 结果存储于eval_record_dir/docker_name/sub_name.json
+        2) docker_name: str docker名 
+        3) traj_record_dir: str 轨迹数据存储路径
+        4) eval_record_dir: str 评测结果存储路径 结果存储于eval_record_dir/docker_name/sub_name.json
     Returns:
 
     """
-
-    eval_exe_path = kwargs.get('eval_exe_path', '../bin/main.exe')  # ../bin/main.exe
-    single_file = kwargs.get('single_file', True)
+    eval_exe_path = kwargs.get('eval_exe_path', '../bin/eval.exe')  # ../bin/eval.exe
     docker_name = kwargs.get('docker_name', 'test')
-    traj_record_dir = kwargs.get('traj_record_dir', '../data/output/')  # ../data/trajectory/
+    traj_record_dir = kwargs.get('traj_record_dir', '../data/trajectory')  # ../data/trajectory/
     eval_record_dir = kwargs.get('eval_record_path', '../data/evaluation')  # ../data/evaluation/
+    junction_info_dir = kwargs.get('junction_info_dir', '../data/junction')
     # if eval_record_dir is None:
     #     raise EventArgumentError('apply score event handling requires key-only argument "eval_record"')
     # if docker_name is None:
@@ -400,21 +393,22 @@ def handle_eval_apply_event(*args, **kwargs) -> None:
     # traj_file_path = ''
     # eval_file_path = ''
     # 运行测评程序得到eval res
-    if single_file:
-        traj_file_path = os.path.join(traj_record_dir, docker_name) + '.json'
-        eval_file_path = os.path.join(eval_record_dir, docker_name) + '.json'
-    else:
-        sub_name = kwargs.get('sub_name')
-        traj_file_path = os.path.join(traj_record_dir, docker_name, sub_name) + '.json'
-        eval_file_path = os.path.join(eval_record_dir, docker_name, sub_name) + '.json'
-    eval_cmd = [eval_exe_path, traj_file_path, eval_file_path]
-    process = subprocess.Popen(eval_cmd)
-    exit_code = process.wait()
-    # 仅在评测异常时由主程序写入结果，否则由评测程序写入
-    if exit_code != 0:
-        eval_res = {'score': -1, 'detail': 'evaluation faliure'}
-        with open(eval_file_path, 'w+') as f:
-            json.dump(eval_res, f)
+    docker_eval_record_dir = os.path.join(eval_record_dir, docker_name)
+    if not os.path.exists(docker_eval_record_dir):
+        os.mkdir(docker_eval_record_dir)
+    docker_traj_record_dir = os.path.join(traj_record_dir, docker_name)
+    for file in os.listdir(docker_traj_record_dir):
+        traj_file_path = os.path.join(docker_traj_record_dir, file)
+        eval_file_path = os.path.join(docker_eval_record_dir, file)
+        eval_cmd = [eval_exe_path, traj_file_path, junction_info_dir, eval_file_path]
+        process = subprocess.Popen(eval_cmd)
+        exit_code = process.wait()
+        # 仅在评测异常时由主程序写入结果，否则由评测程序写入
+        if exit_code != 0:
+            eval_res = {'score': -1, 'detail': 'evaluation faliure'}
+            with open(eval_file_path, 'w+') as f:
+                json.dump(eval_res, f)
+    
 
 
 def handle_score_report_event(*args, **kwargs) -> None:
@@ -423,37 +417,31 @@ def handle_score_report_event(*args, **kwargs) -> None:
     Args:
         *args:
         **kwargs:
-        1) single_file 是否为单个测评
-        2) eval_record_dir: str 评测结果存储路径
-        3) docker_name: str docker名 
-        4) connection mqtt连接
+        1) eval_record_dir: str 评测结果存储路径
+        2) docker_name: str docker名 
+        3) connection mqtt连接
     """
-    single_file = kwargs.get('single_file', True)
     eval_record_dir = kwargs.get('eval_record_dir', '../data/evaluation')
     docker_name = kwargs.get('docker_name', 'test')
-    if single_file:
-        path = os.path.join(eval_record_dir, docker_name) + '.json'
-        with open(path, 'r') as f:
-            all_result = json.load(f)
-    else:
-        eval_record_dir = kwargs.get('eval_record_dir')
-        docker_name = kwargs.get('docker_name')
-        all_result = {'score': 0, 'name': docker_name, 'abnormal': 0}
-        detail = {'errorTimes': 0, 'detailInfo': []}
-        eval_count = 0
-        for file in os.listdir(os.path.join(eval_record_dir, docker_name)):
-            eval_count += 1
-            with open(file, 'r') as f:
-                single_result: dict = json.load(f)
-                if single_result['score'] == -1:  # evaluation error
-                    all_result['abnormal'] = 1
-                    detail['errorTimes'] = detail['errorTimes'] + 1
-                    detail['detailInfo'].append(single_result['detail'])
-                else:
-                    all_result['score'] = all_result['score'] + single_file['score']
-                    detail['detailInfo'].append(single_result)
-        all_result['score'] = float(all_result['score']) / float(eval_count)
-        all_result['detail'] = detail
+
+    eval_record_dir = kwargs.get('eval_record_dir')
+    docker_name = kwargs.get('docker_name')
+    all_result = {'score': 0, 'name': docker_name, 'abnormal': 0}
+    detail = {'errorTimes': 0, 'detailInfo': []}
+    eval_count = 0
+    for file in os.listdir(os.path.join(eval_record_dir, docker_name)):
+        eval_count += 1
+        with open(os.path.join(eval_record_dir, docker_name, file), 'r') as f:
+            single_result: dict = json.load(f)
+            if single_result['score'] == -1:  # evaluation error
+                all_result['abnormal'] = 1
+                detail['errorTimes'] = detail['errorTimes'] + 1
+                detail['detailInfo'].append(single_result['detail'])
+            else:
+                all_result['score'] = all_result['score'] + single_file['score']
+                detail['detailInfo'].append(single_result)
+    all_result['score'] = float(all_result['score']) / float(eval_count)
+    all_result['detail'] = detail
     connection = kwargs.get('connection')
     connection.publish(PubMsgLabel(all_result, OrderMsg.ScoreReport, 'json'))
 
