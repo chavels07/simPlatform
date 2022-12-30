@@ -124,30 +124,47 @@ class NaiveSimInfoStorage:
         sc_control_task = sc.create_control_task(signal_scheme)
         return sc_control_task
 
-    @staticmethod
-    def create_safety_message_info_task(target_topic: str = None, region: set = None):
-        """
-        创建获取车辆安全消息任务
-        Args:
-            target_topic: 发送的目标topic
-            region: 所选的交叉口范围
+    # @staticmethod
+    # def create_safety_message_info_task(target_topic: str = None, region: set = None):
+    #     """
+    #     创建获取车辆安全消息任务
+    #     Args:
+    #         target_topic: 发送的目标topic
+    #         region: 所选的交叉口范围
+    #
+    #     Returns:
+    #
+    #     """
+    #     return InfoTask(safety_message_pub_msg, args=(region,), target_topic=target_topic)  # TODO: 等待core执行传入的函数，并发送到topic
 
-        Returns:
-
-        """
-        return InfoTask(safety_message_pub_msg, args=(region,), target_topic=target_topic)  # TODO: 等待core执行传入的函数，并发送到topic
-
-    def create_speedguide_task(self, MSG_SpeedGuide_list: List[dict]) -> Optional[List[ImplementTask]]:
+    def create_speedguide_task(self, MSG_SpeedGuide: dict) -> Optional[List[ImplementTask]]:
         """
         根据传入时刻创建车速引导任务：首先获取车速引导信息，创建车速引导任务，删除多余储存
         Args:
-            MSG_SpeedGuide_list:当前时刻传入的多条车速引导指令的列表。指令内容详见https://code.zbmec.com/mec_core/mecdata/-/wikis/8-典型应用场景/1-车速引导
+            MSG_SpeedGuide:当前时刻传入的多条车速引导指令。指令内容详见https://code.zbmec.com/mec_core/mecdata/-/wikis/8-典型应用场景/1-车速引导
         Returns:
             车速引导指令。[{veh_id: guide}]
         """
+        def _traci_set_speed_wrapper(vehID, speed):
+            try:
+                traci.vehicle.setSpeed(vehID=vehID, speed=speed)
+                logger.info(f'set speed {speed} for vehicle {vehID} successfully')
+                return True, None
+            except traci.TraCIException as e:
+                logger.warn(f'cannot set speed {speed} for vehicle {vehID}, traceback message from traci: {e.args}')
+                return False, None
+
+        def _traci_set_max_speed_wrapper(vehID, speed):
+            try:
+                traci.vehicle.setMaxSpeed(vehID=vehID, speed=speed)
+                return True, None
+            except traci.TraCIException as e:
+                logger.warn(f'cannot set max speed {speed} for vehicle {vehID}, traceback message from traci: {e.args}')
+                return False, None
+
         # TODO: msg_speed_guide 应从list[dict]转为 dict，对一条speed_guide_msg生成一个task (Zhu)
-        current_time = traci.simulation.getTime()
-        self.vehicle_controller.get_speedguide_info(MSG_SpeedGuide_list)  # 获取车速引导信息
+        current_time = SimStatus.sim_time_stamp
+        self.vehicle_controller.get_speedguide_info(MSG_SpeedGuide)  # 获取车速引导信息
 
         _guidance = {veh_id: guide for veh_id, guidances in self.vehicle_controller.SpeedGuidanceStorage.items()
                      for time, guide in guidances.items() if time == current_time}  # 找出当前时刻的指令
@@ -156,8 +173,8 @@ class NaiveSimInfoStorage:
         else:
             _task = []  # 创建车速引导任务
             for veh_id, guide in _guidance.items():
-                _task.append(ImplementTask(traci.vehicle.setMaxSpeed(veh_id, guide+0.01), exec_time=current_time))
-                _task.append(ImplementTask(traci.vehicle.setSpeed(veh_id, guide), exec_time=current_time))
+                _task.append(ImplementTask(_traci_set_max_speed_wrapper, args=(veh_id, guide+0.01)))
+                _task.append(ImplementTask(_traci_set_speed_wrapper, args=(veh_id, guide)))
             
             self.vehicle_controller.update_speedguide_info(current_time)  # 删除多余存储
 

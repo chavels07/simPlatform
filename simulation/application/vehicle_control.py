@@ -9,7 +9,12 @@ import sumolib
 import traci
 
 from simulation.lib.common import logger
-from simulation.lib.public_data import *
+from simulation.lib.public_data import SimStatus
+
+
+def flow_str_convert(veh_id: int):
+    """对于Flow形式输入的交通流车辆id的转换"""
+    return ''.join(('flow', str(veh_id), '.0'))
 
 
 class VehicleController:
@@ -30,22 +35,24 @@ class VehicleController:
         Args:
             MSG_SpeedGuide:当前时刻传入的车速引导指令。指令内容详见https://code.zbmec.com/mec_core/mecdata/-/wikis/8-典型应用场景/1-车速引导
         """
-        if MSG_SpeedGuide['veh_id'] not in self.SpeedGuidanceStorage:
-            self.SpeedGuidanceStorage[MSG_SpeedGuide['veh_id']] = {}  # 创建车速引导指令
+        veh_id_str = flow_str_convert(MSG_SpeedGuide['veh_id'])
+        if veh_id_str not in self.SpeedGuidanceStorage:
+            self.SpeedGuidanceStorage[veh_id_str] = {}  # 创建车速引导指令
         for guide_info in MSG_SpeedGuide['guide_info']:  # 进入同一MSG下的不同guide_info
-            self.SpeedGuidanceStorage[MSG_SpeedGuide['veh_id']][guide_info['time']] = guide_info['guide'] / 10  # 更新车速引导指令
+            self.SpeedGuidanceStorage[veh_id_str][SimStatus.sim_time_stamp] = guide_info['guide'] / 10  # 更新车速引导指令
+            # Jimmy: 收到指令后直接执行，时间改为当前仿真时间
 
         return None
 
-    def update_speedguide_info(self, current_time: int) -> None:
+    def update_speedguide_info(self, current_time: float) -> None:
         """
         根据传入时刻更新SpeedGuidanceStorage
         Args:
             仿真时刻
         """
-        for veh, guidances in self.SpeedGuidanceStorage.items():
-            guidances = {time: guide for time, guide in guidances.items() if time > current_time}
-        self.SpeedGuidanceStorage = {veh: guidances for veh, guidances in self.SpeedGuidanceStorage if len(guidances) != 0}
+        # for veh, guidances in self.SpeedGuidanceStorage.items():
+        #     guidances = {time: guide for time, guide in guidances.items() if time > current_time}
+        self.SpeedGuidanceStorage = {veh: guidances for veh, guidances in self.SpeedGuidanceStorage.items() if len(guidances) != 0}
 
         return None
 

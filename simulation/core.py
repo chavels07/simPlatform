@@ -53,7 +53,8 @@ class SimCore:
         self.storage = ArterialSimInfoStorage() if arterial_storage else NaiveSimInfoStorage()  # 仿真部分数据存储
         # 允许创建任务的函数返回一系列任务或单个任务，目的是为了保证不同类型的task creator函数只有单个
         # self.internal_task_creator: List[Callable[[], Union[Sequence[BaseTask], BaseTask]]] = []
-        self.task_create_func: Dict[DetailMsgType, Callable[[Union[dict, str]], Optional[BaseTask]]] = {}
+        self.task_create_func: Dict[DetailMsgType,
+                                    Callable[[Union[dict, str]], Optional[Union[BaseTask, Iterable[BaseTask]]]]] = {}
         self.cycle_task_queue: List[BaseTask] = []
         self.single_task_queue: List[BaseTask] = []
 
@@ -123,7 +124,7 @@ class SimCore:
 
             # TODO: test
             # self.storage._test()
-            # time.sleep(0.2)
+            # time.sleep(0.1)
 
             # 周期执行任务
             if len(self.cycle_task_queue):
@@ -199,7 +200,11 @@ class SimCore:
 
             new_task = handler_func(msg_info)
             if new_task is not None:
-                self.add_new_task(new_task)
+                if isinstance(new_task, Iterable):
+                    for single_task in new_task:
+                        self.add_new_task(single_task)
+                else:
+                    self.add_new_task(new_task)
 
     # def handle_internal_tasks(self):
     #     """执行仿真内部需要执行的任务，由于task执行之后马上会被卸载，因此需要提供重复创建task的函数"""
@@ -350,7 +355,7 @@ def handle_trajectory_record_event(*args, **kwargs) -> None:
         os.mkdir(docker_record_dir)
     veh_info = kwargs.get('veh_info')
     sub_name = kwargs.get('sub_name', docker_name)
-    path = os.path.join((traj_record_dir, docker_name, sub_name)) + '.json'
+    path = os.path.join(traj_record_dir, docker_name, sub_name) + '.json'
     with open(path, 'w+') as f:
         json.dump(veh_info, f, indent=2)
 
@@ -361,8 +366,8 @@ def handle_multiple_trajectory_record_event(*args, **kwargs) -> None:
 
     for junction_id, veh_info in trajectories.items():
         # handle_trajectory_record_event(traj_record_dir=save_dir, veh_info=veh_info)
-        handle_trajectory_record_event(traj_record_dir=save_dir, docker_name = "test4",         
-                                       sub_name='_'.join(('test4', junction_id)), veh_info=veh_info)
+        handle_trajectory_record_event(traj_record_dir=save_dir, docker_name="test",
+                                       sub_name='_'.join(('test', junction_id)), veh_info=veh_info)
 
     logger.info(f'轨迹记录已保存在{save_dir}')
 
@@ -408,7 +413,6 @@ def handle_eval_apply_event(*args, **kwargs) -> None:
             eval_res = {'score': -1, 'detail': 'evaluation faliure'}
             with open(eval_file_path, 'w+') as f:
                 json.dump(eval_res, f)
-    
 
 
 def handle_score_report_event(*args, **kwargs) -> None:
@@ -424,8 +428,8 @@ def handle_score_report_event(*args, **kwargs) -> None:
     eval_record_dir = kwargs.get('eval_record_dir', '../data/evaluation')
     docker_name = kwargs.get('docker_name', 'test')
 
-    eval_record_dir = kwargs.get('eval_record_dir')
-    docker_name = kwargs.get('docker_name')
+    # eval_record_dir = kwargs.get('eval_record_dir')
+    # docker_name = kwargs.get('docker_name')
     all_result = {'score': 0, 'name': docker_name, 'abnormal': 0}
     detail = {'errorTimes': 0, 'detailInfo': []}
     eval_count = 0
@@ -438,7 +442,7 @@ def handle_score_report_event(*args, **kwargs) -> None:
                 detail['errorTimes'] = detail['errorTimes'] + 1
                 detail['detailInfo'].append(single_result['detail'])
             else:
-                all_result['score'] = all_result['score'] + single_file['score']
+                all_result['score'] = all_result['score'] + single_result['score']
                 detail['detailInfo'].append(single_result)
     all_result['score'] = float(all_result['score']) / float(eval_count)
     all_result['detail'] = detail
@@ -478,6 +482,9 @@ class AlgorithmEval:
                         trajectories=self.sim.storage.trajectory_info)
 
         traci.close()
+
+        # using for test
+        self.eval_task_start(connection=self.sim.connection)
 
     def eval_task_start(*args, **kwargs):
         emit_eval_event(EvalEventType.START_EVAL, *args, **kwargs)
@@ -555,4 +562,4 @@ class AlgorithmEval:
                     self.testing_name = msg_['docker'].split(test_name_split)[-1]  # 获取分割后的最后一部分作为测试名称
                     self.__eval_start_func()
 
-                    self.eval_task_start()
+                    self.eval_task_start(connection=self.sim.connection)

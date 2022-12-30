@@ -2,4 +2,4 @@
 
 
 #### 未完成的部分
-详见docs/任务分配.docx
+设置warm-up时间，trajectory的初始时间戳应设为0s

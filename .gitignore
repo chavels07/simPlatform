@@ -4,5 +4,8 @@ __pycache__/
 /logs/
 tmp/
 /data/output/
+/data/evaluation/
+/data/trajectory/
 trajectories.out.xml
 e2*.xml
+*.exe
