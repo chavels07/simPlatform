@@ -100,11 +100,11 @@ class Flow:
         detector_counter.reset()  # 重置记录时间和流量记录
         return flow_fixed_period, period
 
-    def create_traffic_flow_pub_msg(self) -> Tuple[bool, PubMsgLabel]:
+    def create_traffic_flow_pub_msg(self, intersections: List[str] = None) -> Tuple[bool, PubMsgLabel]:
         """
         创建TrafficFlow推送消息，
         Args:
-            *args: 可变长度的需要推送flow信息的Link，若为缺省则则输出所有检测器的交通流集计数据
+            intersections: 推送TF数据的交叉口
 
         Returns: 推送消息实例
 
@@ -112,6 +112,8 @@ class Flow:
         tf_msgs = []
         timestamp = SimStatus.current_real_timestamp()
         for node_id, detectors_in_node in self.detector_location.items():
+            if intersections is not None and node_id not in intersections:
+                continue  # 不在所选范围内调过
             node = create_NodeReferenceID(signalized_intersection_name_decimal(node_id))
             tf_stats = []
             period = 0

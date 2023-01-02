@@ -1,0 +1,37 @@
+{
+	"preliminary": {
+		"config_file_path": "data/network/anting.sumocfg",
+		"network_file_path": "data/network/anting.net.xml",
+		"route_file_path": "data/network/route/arterial",
+		"detector_file_path": "data/network/detector_1.xml",
+		"test_name": "Test",
+		"arterial_mode": false,
+		"await_start_cmd": false
+	},
+	"simulation": {
+		"pub_msg": {
+			"basic_safety_message": {
+				"frequency": 0.1
+			},
+			"roadside_safety_message": {
+				"frequency": -1
+			},
+			"signal_phase_and_timing": {
+				"frequency": 0.1
+			},
+			"traffic_flow": {
+				"frequency": 60
+			},
+			"signal_execution": {
+				"frequency": -1
+			}
+		},
+		"junction_region": ["point79", "point80", "point81"],
+		"sim_time_step": 0.1,
+		"sim_time_limit": 300
+	},
+	"connection": {
+		"broker": "121.36.231.253",
+		"port": 1883
+	}
+}

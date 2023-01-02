@@ -10,15 +10,16 @@ import json
 import subprocess
 import heapq
 
-from collections import OrderedDict, defaultdict
+from collections import OrderedDict, defaultdict, abc
 from datetime import datetime
 from enum import Enum, auto
 from functools import partial
-from typing import List, Dict, Optional, Callable, Union, Sequence, Iterable
+from typing import List, Dict, Optional, Callable, Union, Iterable
 
+import simulation.lib.config as config
 from simulation.lib.common import logger, singleton, timer
 from simulation.lib.public_conn_data import DataMsg, OrderMsg, SpecialDataMsg, DetailMsgType, PubMsgLabel
-from simulation.lib.public_data import ImplementTask, InfoTask, EvalTask, BaseTask, SimStatus
+from simulation.lib.public_data import ImplementTask, InfoTask, BaseTask, SimStatus
 from simulation.lib.sim_data import NaiveSimInfoStorage, ArterialSimInfoStorage
 from simulation.connection.mqtt import MQTTConnection
 
@@ -58,13 +59,15 @@ class SimCore:
         self.cycle_task_queue: List[BaseTask] = []
         self.single_task_queue: List[BaseTask] = []
 
-    def initialize(self, route_fp: str = None, detector_fp: Optional[str] = None, step_limit: int = None):
+    def initialize(self, route_fp: str = None, detector_fp: Optional[str] = None, step_limit: int = None,
+                   step_len: float = None):
         """
         初始化SUMO路网
         Args:
             route_fp: 车辆路径文件路径
             detector_fp: 检测器文件路径
             step_limit: 限制仿真运行时间(s), None为无限制
+            step_len: 仿真单步时长
 
         Returns:
 
@@ -77,14 +80,17 @@ class SimCore:
             sumoCmd.extend(['-r', route_fp])
         if detector_fp is not None:
             sumoCmd.extend(['-a', detector_fp])
+        if step_len is not None:
+            sumoCmd.extend(['--step-length', str(step_len)])
         traci.start(sumoCmd)
         self.step_limit = step_limit
-        self.storage.quick_init_update_execute(self.net, {'point81'})  # TODO: fixed
+        self.storage.quick_init_update_execute(self.net, set(config.SimulationConfig.junction_region))
 
         # 运行仿真后添加订阅消息
         self.storage.initialize_sub_after_start()
 
     def initialize_internal_storage(self, *, junction_list=None):
+        """仿真内部各功能模块初始化"""
         self.storage.initialize_sc(self.net, junction_list=junction_list)
         self.storage.initialize_participant(self.net, junction_list=junction_list)
 
@@ -102,18 +108,10 @@ class SimCore:
         else:
             heapq.heappush(self.cycle_task_queue, new_task)
 
-    def run(self, step_len: float = 0):
-        """
-
-        Args:
-            step_len: 每一步仿真的更新时间间距(s)
-
-        Returns:
-
-        """
+    def run(self):
         logger.info('仿真开始')
         while traci.simulation.getMinExpectedNumber() >= 0:
-            traci.simulationStep(step=step_len)
+            traci.simulationStep(0)
             # time.sleep(0.1)  # 临时加入
 
             current_timestamp = traci.simulation.getTime()
@@ -200,28 +198,34 @@ class SimCore:
 
             new_task = handler_func(msg_info)
             if new_task is not None:
-                if isinstance(new_task, Iterable):
+                if isinstance(new_task, abc.Iterable):
                     for single_task in new_task:
                         self.add_new_task(single_task)
                 else:
                     self.add_new_task(new_task)
 
-    # def handle_internal_tasks(self):
-    #     """执行仿真内部需要执行的任务，由于task执行之后马上会被卸载，因此需要提供重复创建task的函数"""
-    #     for creator_function in self.internal_task_creator:
-    #         task = creator_function()
-    #         if isinstance(task, Sequence):
-    #             for single_task in task:
-    #                 self.add_new_task(single_task)
-    #         else:
-    #             self.add_new_task(task)
+    def auto_activate(self):
+        """自动读取Config激活需要发送的消息类型"""
+        msg_mapping = {
+            'basic_safety_message': self.activate_bsm_publish,
+            'roadside_safety_message': self.activate_bsm_publish,  # TODO: RSM
+            'signal_phase_and_timing': self.activate_spat_publish,
+            'traffic_flow': self.activate_traffic_flow_publish,
+            'signal_execution': self.activate_signal_execution_publish
+        }
+
+        for msg_type, pub_cycle in config.SimulationConfig.pub_msgs:
+            activate_func = msg_mapping.get(msg_type)
+            if activate_func is None:
+                raise KeyError(f'message: {msg_type} is not supported')
+            activate_func(config.SimulationConfig.junction_region, pub_cycle)
 
     def activate_spat_publish(self, intersections: List[str] = None, pub_cycle: float = 0.1):
         """
         激活仿真SPAT发送功能
         Args:
             intersections: 选定需要发送SPAT的交叉口, 若未提供参数则选中路网所有信控交叉口
-            pub_cycle: SPAT的推送周期
+            pub_cycle: 推送周期
 
         Returns:
 
@@ -235,16 +239,16 @@ class SimCore:
             for ints_id in intersections:
                 sc = self.storage.signal_controllers.get(ints_id)
                 if sc is None:
-                    raise ValueError(f'intersection {ints_id} is not in current map')
+                    raise KeyError(f'intersection {ints_id} is not in current map')
                 self.add_new_task(
                     InfoTask(exec_func=sc.create_spat_pub_msg, cycle_time=pub_cycle, task_name=f'SPAT-{ints_id}'))
 
-    def activate_signal_execution_publish(self,  intersections: List[str] = None, pub_cycle: float = 0.1):
+    def activate_signal_execution_publish(self, intersections: List[str] = None, pub_cycle: float = 0.1):
         """
-
+        激活仿真SignalExecution发送功能
         Args:
-            intersections:
-            pub_cycle:
+            intersections: 选定需要发送SE的交叉口, 若未提供参数则选中路网所有信控交叉口
+            pub_cycle: 推送周期
 
         Returns:
 
@@ -252,52 +256,52 @@ class SimCore:
         if intersections is None:
             for ints_id, sc in self.storage.signal_controllers.items():
                 self.add_new_task(
-                    InfoTask(exec_func=sc.create_signal_execution_pub_msg, cycle_time=pub_cycle, task_name=f'SignalExe-{ints_id}'))
+                    InfoTask(exec_func=sc.create_signal_execution_pub_msg, cycle_time=pub_cycle,
+                             task_name=f'SignalExe-{ints_id}'))
         else:
             for ints_id in intersections:
                 sc = self.storage.signal_controllers.get(ints_id)
                 if sc is None:
-                    raise ValueError(f'intersection {ints_id} is not in current map')
+                    raise KeyError(f'intersection {ints_id} is not in current map')
                 self.add_new_task(
-                    InfoTask(exec_func=sc.create_signal_execution_pub_msg, cycle_time=pub_cycle, task_name=f'SignalExe-{ints_id}'))
+                    InfoTask(exec_func=sc.create_signal_execution_pub_msg, cycle_time=pub_cycle,
+                             task_name=f'SignalExe-{ints_id}'))
 
-    def activate_bsm_publish(self, pub_cycle: float = 0.1):
-        """激活仿真BSM发送功能"""
-        for junction_id, junction_veh in self.storage.junction_veh_cons.items():
-            self.add_new_task(InfoTask(exec_func=junction_veh.create_bsm_pub_msg, cycle_time=pub_cycle,
-                                       task_name=f'BSM-{junction_id}'))
+    def activate_bsm_publish(self, intersections: List[str] = None, pub_cycle: float = 0.1):
+        """
+        激活仿真BSM发送功能
+        Args:
+            intersections: 选定需要发送BSM的交叉口范围区域, 若未提供参数则选中路网所有信控交叉口
+            pub_cycle: 推送周期
 
-    def activate_traffic_flow_publish(self, pub_cycle: float = 60):
-        self.add_new_task(InfoTask(self.storage.flow_status.create_traffic_flow_pub_msg, cycle_time=pub_cycle,
-                                   task_name=f'TrafficFlow'))
+        Returns:
 
+        """
+        if intersections is None:
+            for ints_id, veh_container in self.storage.junction_veh_cons.items():
+                self.add_new_task(InfoTask(exec_func=veh_container.create_bsm_pub_msg, cycle_time=pub_cycle,
+                                           task_name=f'BSM-{ints_id}'))
+        else:
+            for ints_id in intersections:
+                veh_container = self.storage.junction_veh_cons.get(ints_id)
+                if veh_container is None:
+                    raise KeyError(f'intersection {ints_id} is not current map')
+                self.add_new_task(InfoTask(exec_func=veh_container.create_bsm_pub_msg, cycle_time=pub_cycle,
+                                           task_name=f'BSM-{ints_id}'))
 
-# 创建task creator时需要借助partial将其包装成一个无传入参数的callable函数(已被cycle_time的重复任务代替)
-# def _create_info_task(funcs, task_type: Type[BaseTask], cycle_time: float) -> List[BaseTask]:
-#     """
-#     辅助创建周期性的task，每次调用即可通过传入的funcs重新创建task list
-#     Args:
-#         funcs: 可产生Task的函数
-#         task_type: Task的类型
-#         cycle_time: 周期执行的时间
-#
-#     Returns:
-#
-#     """
-#     return [task_type(func, ) for func in funcs]
-#
-#
-# def _create_single_task(func, task_type: Type[BaseTask], cycle_time: float) -> BaseTask:
-#     """
-#     辅助创建周期性的task，每次调用后生成一个新的task
-#     Args:
-#         func: 可产生Task的函数
-#         task_type: Task的类型
-#
-#     Returns:
-#
-#     """
-#     return task_type(func, )
+    def activate_traffic_flow_publish(self, intersections: List[str] = None, pub_cycle: float = 60):
+        """
+        激活仿真TrafficFlow发送功能
+        Args:
+            intersections: 选定需要发送TF的交叉口, 若未提供参数则选中路网所有信控交叉口
+            pub_cycle: 推送周期
+
+        Returns:
+
+        """
+        self.add_new_task(
+            InfoTask(self.storage.flow_status.create_traffic_flow_pub_msg, args=(intersections,), cycle_time=pub_cycle,
+                     task_name=f'TrafficFlow'))
 
 
 """测评系统与仿真无关的内容均以事件形式定义(如生成json轨迹文件，发送评分等)，处理事件的函数的入参以关键词参数形式传入，返回值固定为None"""
@@ -460,24 +464,34 @@ def initialize_score_prepare():
 
 @singleton
 class AlgorithmEval:
-    def __init__(self, cfg_fp: str = '../data/network/anting.sumocfg',
-                 network_fp: str = '../data/network/anting.net.xml'):
-        self.sim = SimCore(cfg_fp, network_fp, arterial_storage=True)
-        self.testing_name: str = 'No test'
+    def __init__(self):
+        self.sim = SimCore(config.SetupConfig.config_file_path,
+                           config.SetupConfig.network_file_path,
+                           config.SetupConfig.arterial_mode)
+        self.testing_name: str = config.SetupConfig.test_name
         self.eval_record: Dict[str, dict] = {}
         self.__eval_start_func: Optional[Callable[[], None]] = None
 
-    def connect(self, broker: str, port: int, topics=None):
-        self.sim.connect(broker, port, topics=topics)
+        # 通信
+        self.sim.connect(config.ConnectionConfig.broker, config.ConnectionConfig.port)
 
-    def initialize(self):
-        """对sim里面的内容进行初始化"""
+        # 注册任务生成函数
         self.sim.quick_register_task_creator_all()
 
-    def sim_task_start(self, route_fp: str, detector_fp: Optional[str] = None, step_limit: int = None,
-                       step_len: float = 0):
-        self.sim.initialize(route_fp, detector_fp, step_limit)
-        self.sim.run(step_len)
+        # 初始化内部仿真内部功能模块
+        self.sim.initialize_internal_storage(junction_list=config.SimulationConfig.junction_region)
+
+        # 仿真运行开始方式
+        self.mode_setting(config.SetupConfig.is_route_directory(),
+                          config.SetupConfig.route_file_path,
+                          detector_fp=config.SetupConfig.detector_file_path)
+
+        # 注册仿真各环节触发的事件
+        self.auto_initialize_event()
+
+    def sim_task_start(self, route_fp: str, detector_fp: Optional[str] = None, step_limit: int = None, step_len: float = None):
+        self.sim.initialize(route_fp, detector_fp, step_limit, step_len)
+        self.sim.run()
         emit_eval_event(EvalEventType.FINISH_TASK, sim_core=self.sim, eval_record=self.eval_record,
                         trajectories=self.sim.storage.trajectory_info)
 
@@ -495,7 +509,7 @@ class AlgorithmEval:
         initialize_score_prepare()
 
     def sim_task_from_directory(self, sce_dir_fp: str, detector_fp: Optional[str], *, f_name_startswith: str = None,
-                                step_limit: int = None, step_len: float = 0):
+                                step_limit: int = None, step_len: float = None):
         """
         从文件夹中读取所有流量文件创建评测任务
 
@@ -516,29 +530,29 @@ class AlgorithmEval:
         for route_fp in route_fps:
             self.sim_task_start(route_fp, detector_fp, step_limit, step_len)
 
-    def mode_setting(self, single_file: bool, *, route_fp: str = None, sce_dir_fp: str = None,
-                     detector_fp: Optional[str] = None, **kwargs) -> None:
+    def mode_setting(self, multiple_file: bool, route_fp: str, *, detector_fp: Optional[str] = None) -> None:
         """
         调用loop_start前，指定测评时流量文件读取模式
         Args:
-            single_file: 是否为单个文件
-            route_fp: route文件
-            sce_dir_fp: route文件所在文件夹
+            multiple_file: 是否为单个文件
+            route_fp: route文件路径
             detector_fp: 检测器文件
-            **kwargs:
 
         Returns:
 
         """
-        if single_file:
-            if route_fp is None:
-                raise ValueError('运行单个流量文件时route_fp参数需给定')
-            self.__eval_start_func = partial(self.sim_task_start, route_fp=route_fp, detector_fp=detector_fp)
+        if multiple_file:
+            self.__eval_start_func = partial(self.sim_task_from_directory,
+                                             sce_dir_fp=route_fp,
+                                             detector_fp=detector_fp,
+                                             step_limit=config.SimulationConfig.sim_time_limit,
+                                             step_len=config.SimulationConfig.sim_time_step)
         else:
-            if sce_dir_fp is None:
-                raise ValueError('运行文件夹下所有流量文件时sce_dir_fp参数需给定')
-            self.__eval_start_func = partial(self.sim_task_from_directory, sce_dir_fp=sce_dir_fp,
-                                             detector_fp=detector_fp, **kwargs)
+            self.__eval_start_func = partial(self.sim_task_start,
+                                             route_fp=route_fp,
+                                             detector_fp=detector_fp,
+                                             step_limit=config.SimulationConfig.sim_time_limit,
+                                             step_len=config.SimulationConfig.sim_time_step)
 
     def loop_start(self, test_name_split: str = ' '):
         """
@@ -563,3 +577,10 @@ class AlgorithmEval:
                     self.__eval_start_func()
 
                     self.eval_task_start(connection=self.sim.connection)
+
+    def start(self):
+        """运行仿真测评"""
+        if config.SetupConfig.await_start_cmd:
+            self.loop_start()
+        else:
+            self.__eval_start_func()
