@@ -3,20 +3,18 @@
 # @File        : sim_data.py
 # @Description : 存放仿真运行环节需要记录的数据
 
-import json
-from collections import namedtuple
 from dataclasses import dataclass
-from abc import abstractmethod
 from typing import Tuple, Dict, Callable, Any, Optional, List, Set, Iterable
 
 import sumolib
 import traci
 
 from simulation.lib.common import logger, timer
+from simulation.lib.config import SimulationConfig, CONFIG_MSG_NAME
 from simulation.lib.public_data import ImplementTask, InfoTask, signalized_intersection_name_str, SimStatus
 from simulation.lib.public_conn_data import PubMsgLabel
 from simulation.information.traffic import Flow
-from simulation.information.participants import safety_message_pub_msg, JunctionVehContainer
+from simulation.information.participants import JunctionVehContainer
 from simulation.application.signal_control import SignalController
 from simulation.application.vehicle_control import VehicleController
 
@@ -39,10 +37,6 @@ class NaiveSimInfoStorage:
         self.trajectory_info = {}
 
         self.update_module_method: List[Callable[[], None]] = []
-
-    def _test(self):
-        for junction_id, junction in self.junction_veh_cons.items():
-            junction.get_vehicle_info()
 
     def initialize_sc(self, net: sumolib.net.Net,  junction_list: Iterable[str] = None):
         """初始化sc控制器"""
@@ -93,8 +87,13 @@ class NaiveSimInfoStorage:
         Returns:
 
         """
-        self.flow_status.initialize_counter(net, nodes)
-        self.update_module_method.append(self.flow_status.flow_update_task())
+        # 如果需要发送TrafficFlow，添加更新TF方法
+        if any(msg.name == CONFIG_MSG_NAME['TF'] for msg in SimulationConfig.pub_msgs):
+            self.flow_status.initialize_counter(net, nodes)
+            self.update_module_method.append(self.flow_status.flow_update_task())
+        # 添加更新车辆信息方法，用于发送BSM/RSM或记录轨迹信息
+        for container in self.junction_veh_cons.values():
+            self.update_module_method.append(container.update_vehicle_info)
         self.update_module_method.append(self.record_trajectories_update_task())
 
     def initialize_sub_after_start(self):
@@ -187,7 +186,7 @@ class NaiveSimInfoStorage:
             if SimStatus.sim_time_stamp % interval:
                 return None
             for junction_id, veh_container in self.junction_veh_cons.items():
-                _, trajectories = veh_container.get_vehicle_info()
+                trajectories = veh_container.get_trajectories()
                 if not trajectories:
                     return None
 
