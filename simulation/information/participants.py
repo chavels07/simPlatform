@@ -4,14 +4,16 @@
 # @Description : 交通参与者信息提取
 
 from dataclasses import dataclass
-from typing import Tuple, List, Dict, Optional
+from typing import Tuple, List, Dict
 
 import traci
 import traci.constants as tc
 import sumolib
 
-from simulation.lib.public_data import (create_SafetyMessage, create_NodeReferenceID, create_trajectory, SimStatus,
-                                        veh_name_from_flow_decimal, signalized_intersection_name_decimal)
+from simulation.lib.public_data import (create_SafetyMessage, create_RoadsideSafetyMessage, create_ParticipantData,
+                                        create_NodeReferenceID,
+                                        create_trajectory, SimStatus, veh_name_from_flow_decimal,
+                                        signalized_intersection_name_decimal)
 from simulation.lib.public_conn_data import DataMsg, PubMsgLabel
 
 
@@ -251,9 +253,13 @@ class JunctionVehContainer:
     #         self.trajectory: Dict[str, dict] = {}
     #         self.last_update_time = -1
 
-    def __init__(self, junction_id: str):
+    def __init__(self, junction_id: str, central_x: float, central_y: float):
         self.junction_id = junction_id
+        self.central_x = central_x
+        self.central_y = central_y
+        self.central_lon, self.central_lat = self._net.convertXY2LonLat(central_x, central_y)
         self.vehs_info: List[VehInfo] = []
+        self.node_info = create_NodeReferenceID(signalized_intersection_name_decimal(self.junction_id))
 
     @classmethod
     def load_net(cls, net: sumolib.net.Net):
@@ -274,7 +280,7 @@ class JunctionVehContainer:
             local_x, local_y = sub_veh_info[tc.VAR_POSITION]
             lon, lat = self._net.convertXY2LonLat(local_x, local_y)
 
-            edge_id = '' if 'point' in sub_veh_info[tc.VAR_ROAD_ID] or 'J' in sub_veh_info[tc.VAR_ROAD_ID]\
+            edge_id = '' if 'point' in sub_veh_info[tc.VAR_ROAD_ID] or 'J' in sub_veh_info[tc.VAR_ROAD_ID] \
                 else sub_veh_info[tc.VAR_ROAD_ID]  # 交叉口内部的edge_id为空
 
             veh_info = VehInfo(ptcId=veh_id_num,
@@ -361,8 +367,6 @@ class JunctionVehContainer:
         #     # safety_msgs.append(_SafetyMessage)
         #     # trajectories[str(veh_id_num)] = trajectory
 
-        node = create_NodeReferenceID(signalized_intersection_name_decimal(self.junction_id))
-
         sm_msgs = [
             create_SafetyMessage(ptcId=veh_info.ptcId,
                                  moy=SimStatus.current_moy(),
@@ -371,7 +375,7 @@ class JunctionVehContainer:
                                  lon=veh_info.lon,
                                  x=veh_info.local_x,
                                  y=veh_info.local_y,
-                                 node=node,
+                                 node=self.node_info,
                                  lane_ref_id=veh_info.lane_ref_id,
                                  speed=veh_info.speed,
                                  direction=veh_info.direction,
@@ -392,12 +396,32 @@ class JunctionVehContainer:
         return True, PubMsgLabel(newly_multiple_bsm, DataMsg.SafetyMessage, convert_method='flatbuffers', multiple=True)
 
     def get_rsm(self) -> dict:
-        pass
+        participants = [
+            create_ParticipantData(ptc_id=veh_info.ptcId,
+                                   moy=SimStatus.current_moy(),
+                                   secMark=SimStatus.current_timestamp_in_minute(),
+                                   lat=veh_info.lat - self.central_lat,  # lat和lon均表示为中心偏移量
+                                   lon=veh_info.lon - self.central_lon,
+                                   x=veh_info.local_x - self.central_x,
+                                   y=veh_info.local_y - self.central_y,
+                                   speed=veh_info.speed,
+                                   heading=veh_info.direction,
+                                   acceleration=veh_info.acceleration,
+                                   width=veh_info.width,
+                                   length=veh_info.length,
+                                   classification=veh_info.classification,
+                                   node=self.node_info,
+                                   edge_id=veh_info.edge_id,
+                                   lane_id=veh_info.lane_id)
+            for veh_info in self.vehs_info
+        ]
+        rsm = create_RoadsideSafetyMessage(node_id=signalized_intersection_name_decimal(self.junction_id),
+                                           lat=self.central_lat,
+                                           lon=self.central_lon,
+                                           participants=participants)
+        return rsm
 
     def create_rsm_pub_msg(self) -> Tuple[bool, PubMsgLabel]:
         """创建RSM的推送消息"""
         newly_rsm = self.get_rsm()
-        return True, PubMsgLabel(newly_rsm, DataMsg.R, convert_method='flatbuffers')  # TODO: begin here
-
-def get_roadside_vehicle_info(self):
-    pass
+        return True, PubMsgLabel(newly_rsm, DataMsg.RoadsideSafetyMessage, convert_method='flatbuffers')

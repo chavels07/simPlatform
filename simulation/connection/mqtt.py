@@ -6,18 +6,18 @@
 import json
 import random
 import threading
-import time
 from collections import namedtuple
 from queue import Queue
-from typing import Tuple, Dict, Iterator, Iterable, Union, Optional, Any, Type, Callable
+from typing import Tuple, Iterator, Iterable, Union, Type
 
 from paho.mqtt.client import Client, MQTTMessage
 
 from simulation.connection.python_fbconv.fbconv import FBConverter
-from simulation.lib.common import logger, timer
+from simulation.lib.common import logger
 from simulation.lib.public_conn_data import OrderMsg, DataMsg, SpecialDataMsg, DetailMsgType, PubMsgLabel
 
-fb_converter = FBConverter()  # only used here
+FB_CACHE_SIZE = 102400
+fb_converter = FBConverter(FB_CACHE_SIZE)  # only used here
 
 _MsgProperty = namedtuple('MsgProperty', ['topic_name', 'fb_code'])
 MSG_TYPE_INFO = {
@@ -34,6 +34,7 @@ MSG_TYPE_INFO = {
     DataMsg.SignalPhaseAndTiming: _MsgProperty('MECCloud/1/SPAT', 0x18),  # SPAT和BSM原来1均在末位，此处进行调整
     DataMsg.TrafficFlow: _MsgProperty('MECCloud/1/TrafficFlow', 0x25),
     DataMsg.SafetyMessage: _MsgProperty('MECCloud/1/BSM', 0x17),
+    DataMsg.RoadsideSafetyMessage: _MsgProperty('MECCloud/1/RSM', 0x1c),
     DataMsg.SignalExecution: _MsgProperty('MECCloud/1/SignalExecution', 0x30),
     OrderMsg.ScoreReport: _MsgProperty('MECUpload/1/AlgoImageTest', None)  # 分数上报
 }
@@ -258,6 +259,7 @@ class PubClient:
             if fb_code is None:
                 raise ValueError(f'no flatbuffers structure for msg type {msg_type}')
             _msg = json.dumps(raw_msg).encode('utf-8')
+            print(_msg)
 
             success, _msg = fb_converter.json2fb(fb_code, _msg)
             if success != 0:

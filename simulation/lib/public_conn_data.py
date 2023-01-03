@@ -23,6 +23,7 @@ class DataMsg(MsgType):
     SignalExecution = auto()
     SpeedGuide = auto()
     SafetyMessage = auto()
+    RoadsideSafetyMessage = auto()
     SignalPhaseAndTiming = auto()
     TrafficFlow = auto()
 

@@ -12,7 +12,6 @@ import traci
 from simulation.lib.common import logger, timer
 from simulation.lib.config import SimulationConfig, CONFIG_MSG_NAME
 from simulation.lib.public_data import ImplementTask, InfoTask, signalized_intersection_name_str, SimStatus
-from simulation.lib.public_conn_data import PubMsgLabel
 from simulation.information.traffic import Flow
 from simulation.information.participants import JunctionVehContainer
 from simulation.application.signal_control import SignalController
@@ -68,7 +67,8 @@ class NaiveSimInfoStorage:
 
         junction_veh_cons = {}
         for junction in junction_list:
-            junction_veh_con = JunctionVehContainer(junction)
+            central_x, central_y = net.getNode(junction).getCoord()
+            junction_veh_con = JunctionVehContainer(junction, central_x, central_y)
             junction_veh_cons[junction] = junction_veh_con
         self.junction_veh_cons = junction_veh_cons
 
@@ -123,20 +123,7 @@ class NaiveSimInfoStorage:
         sc_control_task = sc.create_control_task(signal_scheme)
         return sc_control_task
 
-    # @staticmethod
-    # def create_safety_message_info_task(target_topic: str = None, region: set = None):
-    #     """
-    #     创建获取车辆安全消息任务
-    #     Args:
-    #         target_topic: 发送的目标topic
-    #         region: 所选的交叉口范围
-    #
-    #     Returns:
-    #
-    #     """
-    #     return InfoTask(safety_message_pub_msg, args=(region,), target_topic=target_topic)  # TODO: 等待core执行传入的函数，并发送到topic
-
-    def create_speedguide_task(self, MSG_SpeedGuide: dict) -> Optional[List[ImplementTask]]:
+    def create_speed_guide_task(self, MSG_SpeedGuide: dict) -> Optional[List[ImplementTask]]:
         """
         根据传入时刻创建车速引导任务：首先获取车速引导信息，创建车速引导任务，删除多余储存
         Args:
@@ -161,7 +148,6 @@ class NaiveSimInfoStorage:
                 logger.warn(f'cannot set max speed {speed} for vehicle {vehID}, traceback message from traci: {e.args}')
                 return False, None
 
-        # TODO: msg_speed_guide 应从list[dict]转为 dict，对一条speed_guide_msg生成一个task (Zhu)
         current_time = SimStatus.sim_time_stamp
         self.vehicle_controller.get_speedguide_info(MSG_SpeedGuide)  # 获取车速引导信息
 

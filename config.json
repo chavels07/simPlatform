@@ -11,16 +11,16 @@
 	"simulation": {
 		"pub_msg": {
 			"basic_safety_message": {
-				"frequency": 0.1
-			},
-			"roadside_safety_message": {
 				"frequency": -1
 			},
+			"roadside_safety_message": {
+				"frequency": 1
+			},
 			"signal_phase_and_timing": {
-				"frequency": 0.1
+				"frequency": -1
 			},
 			"traffic_flow": {
-				"frequency": 60
+				"frequency": -1
 			},
 			"signal_execution": {
 				"frequency": -1

@@ -179,7 +179,7 @@ class SimCore:
 
     def quick_register_task_creator_all(self):
         self.task_create_func[DataMsg.SignalScheme] = self.storage.create_signal_update_task
-        self.task_create_func[DataMsg.SpeedGuide] = self.storage.create_speedguide_task
+        self.task_create_func[DataMsg.SpeedGuide] = self.storage.create_speed_guide_task
         self.task_create_func[SpecialDataMsg.TransitionSS] = ...  # TODO: 过渡方案，要求获取signal_scheme的task
         self.task_create_func[SpecialDataMsg.SERequirement] = ...
 
@@ -203,7 +203,7 @@ class SimCore:
         """自动读取Config激活需要发送的消息类型"""
         msg_mapping = {
             'basic_safety_message': self.activate_bsm_publish,
-            'roadside_safety_message': self.activate_bsm_publish,  # TODO: RSM
+            'roadside_safety_message': self.activate_rsm_publish,
             'signal_phase_and_timing': self.activate_spat_publish,
             'traffic_flow': self.activate_traffic_flow_publish,
             'signal_execution': self.activate_signal_execution_publish
@@ -283,6 +283,28 @@ class SimCore:
                     raise KeyError(f'intersection {ints_id} is not current map')
                 self.add_new_task(InfoTask(exec_func=veh_container.create_bsm_pub_msg, cycle_time=pub_cycle,
                                            task_name=f'BSM-{ints_id}'))
+
+    def activate_rsm_publish(self, intersections: List[str] = None, pub_cycle: float = 0.1):
+        """
+        激活仿真RSM发送功能
+        Args:
+            intersections: 选定需要发送RSM的交叉口范围区域, 若未提供参数则选中路网所有信控交叉口
+            pub_cycle: 推送周期
+
+        Returns:
+
+        """
+        if intersections is None:
+            for ints_id, veh_container in self.storage.junction_veh_cons.items():
+                self.add_new_task(InfoTask(exec_func=veh_container.create_rsm_pub_msg, cycle_time=pub_cycle,
+                                           task_name=f'RSM-{ints_id}'))
+        else:
+            for ints_id in intersections:
+                veh_container = self.storage.junction_veh_cons.get(ints_id)
+                if veh_container is None:
+                    raise KeyError(f'intersection {ints_id} is not current map')
+                self.add_new_task(InfoTask(exec_func=veh_container.create_rsm_pub_msg, cycle_time=pub_cycle,
+                                           task_name=f'RSM-{ints_id}'))
 
     def activate_traffic_flow_publish(self, intersections: List[str] = None, pub_cycle: float = 60):
         """

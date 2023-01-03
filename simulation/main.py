@@ -17,7 +17,7 @@ if __name__ == '__main__':
     # algorithm_eval = AlgorithmEval(network_fp='../data/network/anting.net.xml')
     # algorithm_eval.connect('121.36.231.253', 1883)
     #
-    # # 初始化Storage TODO: 应该放在内部
+    # # 初始化Storage
     # # algorithm_eval.sim.initialize_internal_storage(junction_list=('point93', 'point92', 'point98'))  # point93 在原路网中无信控
     # algorithm_eval.sim.initialize_internal_storage(junction_list=('point79', 'point80', 'point81'))
     #
