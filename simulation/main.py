@@ -7,7 +7,7 @@ from simulation.core import SimCore, AlgorithmEval
 from simulation.lib.config import load_config
 
 if __name__ == '__main__':
-    load_config('../config.json')
+    load_config('../setting.json')
     algorithm_eval = AlgorithmEval()
     algorithm_eval.sim.auto_activate()
     algorithm_eval.start()

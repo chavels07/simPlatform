@@ -55,7 +55,7 @@ class MQTTConnection:
     #     """向指定topic推送消息，未连接状态则不进行推送"""
     #     return self._state.publish(topic, msg)
 
-    def publish(self, msg_label: 'PubMsgLabel'):
+    def publish(self, msg_label: PubMsgLabel):
         """向指定topic推送消息，未连接状态则不进行推送"""
         return self.__pub_client.publish(msg_label)
 
@@ -146,37 +146,6 @@ def on_message(client, user_data, msg: MQTTMessage):
         msg_ = json.loads(msg_value)  # json 转换成 dict
         print(msg_)
         MessageTransfer.append(short_topic, msg_)
-
-    # # 交通事件主题
-    # if msg.topic == 'MECLocal/TrafficEvent':
-    #     info_fb['accident'] = str(msg.payload.decode(encoding="utf-8"))
-    # # 协同引导主题
-    # if msg.topic == 'MECLocal/RSC':
-    #     info_fb['guidance'] = str(msg.payload.decode(encoding="utf-8"))
-    # # 需求输入主题
-    # if msg.topic == 'MECLocal/Demand':
-    #     info_fb['demand'] = str(msg.payload.decode(encoding="utf-8"))
-    # # 可变限速
-    # if msg.topic == 'MECLocal/VSL':
-    #     info_fb['VSL'] = str(msg.payload.decode(encoding="utf-8"))
-    # # 专用车道
-    # if msg.topic == 'MECLocal/DLC':
-    #     info_fb['DLC'] = str(msg.payload.decode(encoding="utf-8"))
-    # # 换道
-    # if msg.topic == 'MECLocal/VMS':
-    #     info_fb['VMS'] = str(msg.payload.decode(encoding="utf-8"))
-    # # 信控方案
-    # if msg.topic == 'MECLocal/SignalScheme':
-    #     info_fb['signal'] = str(msg.payload.decode(encoding="utf-8"))
-    # # 倒计时
-    # if msg.topic == 'MECLocal/SPAT':
-    #     info_fb['cutdown'] = str(msg.payload.decode(encoding="utf-8"))
-    # # 信控方案上传
-    # if msg.topic == 'MECLocal/Wildcard':
-    #     info_fb['getsignal'] = str(msg.payload.decode(encoding="utf-8"))
-    # # 车速引导
-    # if msg.topic == 'MECLocal/SpeedGuide':
-    #     info_fb['SpeedGuide'] = str(msg.payload.decode(encoding="utf-8"))
 
 
 def on_disconnect(client, userdata, rc):
