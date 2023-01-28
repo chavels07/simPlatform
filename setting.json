@@ -3,7 +3,7 @@
 		"config_file_path": "data/network/anting.sumocfg",
 		"network_file_path": "data/network/anting.net.xml",
 		"route_file_path": "data/network/route/arterial",
-		"detector_file_path": "data/network/detector_1.xml",
+		"detector_file_path": "data/network/detector.xml",
 		"test_name": "Test",
 		"arterial_mode": false,
 		"await_start_cmd": false

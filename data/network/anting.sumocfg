@@ -17,7 +17,6 @@
     <processing>
         <lateral-resolution value="1.2"/>
     </processing>
-    <amitran-output value='trajectories.out.xml'/>
 
     <gui_only>
         <start value="true"/>
