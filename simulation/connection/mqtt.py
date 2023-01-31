@@ -228,7 +228,6 @@ class PubClient:
             if fb_code is None:
                 raise ValueError(f'no flatbuffers structure for msg type {msg_type}')
             _msg = json.dumps(raw_msg).encode('utf-8')
-            print(_msg)
 
             success, _msg = fb_converter.json2fb(fb_code, _msg)
             if success != 0:

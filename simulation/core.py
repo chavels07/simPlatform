@@ -10,8 +10,7 @@ import json
 import subprocess
 import heapq
 
-from collections import OrderedDict, defaultdict, abc
-from datetime import datetime
+from collections import defaultdict, abc
 from enum import Enum, auto
 from functools import partial
 from typing import List, Dict, Optional, Callable, Union, Iterable
@@ -468,6 +467,7 @@ def handle_score_report_event(*args, **kwargs) -> None:
     all_result['score'] = float(all_result['score']) / float(eval_count)
     all_result['detail'] = detail
     connection = kwargs.get('connection')
+    print(f'测试{config.SetupConfig.test_name!r}测评结果: {all_result}')
     connection.publish(PubMsgLabel(all_result, OrderMsg.ScoreReport, 'json'))
 
 

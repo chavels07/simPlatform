@@ -62,25 +62,3 @@ class VehicleController:
         """
         self.SpeedGuidanceStorage.clear()
         return None
-
-    
-
-        
-            
-
-
-
-
-
-
-
-
-    
-
-    
-
-
-        
-
-
-        
