@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # @Time        : 2022/11/25 22:14
 # @File        : vehicle_control.py
-# @Description : 对车辆进行控制
+# @Description : 对车辆进行车速引导控制；若不同MSG对于同一车辆发出不同的speed信息，则按照最新时刻MSG进行更新储存；对于过期的车速引导信息进行删除
 
 from typing import Tuple, List, Dict, Optional
 
@@ -26,14 +26,18 @@ class VehicleController:
 
     @classmethod
     def load_net(cls, net: sumolib.net.Net):
-        """加载VehicleController的路网"""
+        """
+        加载VehicleController的路网
+        Args:
+            net: 当前路网文件
+        """
         cls._net = net
     
     def get_speedguide_info(self, MSG_SpeedGuide: Dict) -> None:
         """
         接收MEC数据，提取有效信息转化成所需
         Args:
-            MSG_SpeedGuide:当前时刻传入的车速引导指令。指令内容详见https://code.zbmec.com/mec_core/mecdata/-/wikis/8-典型应用场景/1-车速引导
+            MSG_SpeedGuide: 当前时刻传入的车速引导指令。指令内容详见https://code.zbmec.com/mec_core/mecdata/-/wikis/8-典型应用场景/1-车速引导
         """
         veh_id_str = flow_str_convert(MSG_SpeedGuide['veh_id'])
         if veh_id_str not in self.SpeedGuidanceStorage:
@@ -44,11 +48,9 @@ class VehicleController:
 
         return None
 
-    def update_speedguide_info(self, current_time: float) -> None:
+    def update_speedguide_info(self) -> None:
         """
-        根据传入时刻更新SpeedGuidanceStorage
-        Args:
-            仿真时刻
+        更新SpeedGuidanceStorage
         """
         # for veh, guidances in self.SpeedGuidanceStorage.items():
         #     guidances = {time: guide for time, guide in guidances.items() if time > current_time}
