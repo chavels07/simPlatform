@@ -10,12 +10,12 @@ import sumolib
 import traci
 
 from simulation.lib.common import logger, timer
-from simulation.lib.config import SimulationConfig, CONFIG_MSG_NAME
 from simulation.lib.public_data import ImplementTask, InfoTask, signalized_intersection_name_str, SimStatus
 from simulation.information.traffic import Flow
 from simulation.information.participants import JunctionVehContainer
 from simulation.application.signal_control import SignalController
 from simulation.application.vehicle_control import VehicleController
+
 
 # IntersectionId = NewType('IntersectionId', str)
 
@@ -28,6 +28,7 @@ class TransitionIntersection:
 
 class NaiveSimInfoStorage:
     """针对单点交叉口的运行数据存储"""
+
     def __init__(self):
         self.flow_status = Flow()  # 流量信息存储
         self.signal_controllers: Optional[Dict[str, SignalController]] = None  # 信号转换计划
@@ -37,7 +38,7 @@ class NaiveSimInfoStorage:
 
         self.update_module_method: List[Callable[[], None]] = []
 
-    def initialize_sc(self, net: sumolib.net.Net,  junction_list: Iterable[str] = None):
+    def initialize_sc(self, net: sumolib.net.Net, junction_list: Iterable[str] = None):
         """初始化sc控制器"""
         SignalController.load_net(net)  # 初始化signal controller的地图信息
         if junction_list is None:
@@ -77,26 +78,32 @@ class NaiveSimInfoStorage:
         for update_func in self.update_module_method:
             update_func()
 
-    def quick_init_update_execute(self, net: sumolib.net.Net, nodes: Set[str] = None):
+    def initialize_update_execute(self, net: sumolib.net.Net, nodes: Iterable[str] = None,
+                                  trajectory_update: bool = True,
+                                  traffic_flow_update: bool = False):
         """
         快速初始化每一步对sim_data数据更新需要执行的函数
         Args:
             net: 地图文件
             nodes: 选定的nodes
+            trajectory_update: 执行车辆轨迹更新
+            traffic_flow_update: 执行TrafficFlow更新
+
 
         Returns:
 
         """
         # 如果需要发送TrafficFlow，添加更新TF方法
-        if any(msg.name == CONFIG_MSG_NAME['TF'] for msg in SimulationConfig.pub_msgs):
-            self.flow_status.initialize_counter(net, nodes)
+        if traffic_flow_update:
+            self.flow_status.initialize_counter(net, set(nodes))
             self.update_module_method.append(self.flow_status.flow_update_task())
         # 添加更新车辆信息方法，用于发送BSM/RSM或记录轨迹信息
-        for container in self.junction_veh_cons.values():
-            self.update_module_method.append(container.update_vehicle_info)
-        self.update_module_method.append(self.record_trajectories_update_task())
+        if trajectory_update:
+            for container in self.junction_veh_cons.values():
+                self.update_module_method.append(container.update_vehicle_info)
+            self.update_module_method.append(self.record_trajectories_update_task())
 
-    def initialize_sub_after_start(self):
+    def initialize_subscribe_after_start(self):
         """调用start建立traci连接后为traffic_light添加订阅"""
         if self.signal_controllers is not None:
             for sc in self.signal_controllers.values():
@@ -131,6 +138,7 @@ class NaiveSimInfoStorage:
         Returns:
             车速引导指令。[{veh_id: guide}]
         """
+
         def _traci_set_speed_wrapper(vehID, speed):
             try:
                 traci.vehicle.setSpeed(vehID=vehID, speed=speed)
@@ -158,15 +166,16 @@ class NaiveSimInfoStorage:
         else:
             _task = []  # 创建车速引导任务
             for veh_id, guide in _guidance.items():
-                _task.append(ImplementTask(_traci_set_max_speed_wrapper, args=(veh_id, guide+0.01)))
+                _task.append(ImplementTask(_traci_set_max_speed_wrapper, args=(veh_id, guide + 0.01)))
                 _task.append(ImplementTask(_traci_set_speed_wrapper, args=(veh_id, guide)))
-            
-            self.vehicle_controller.update_speedguide_info(current_time)  # 删除多余存储
+
+            self.vehicle_controller.update_speedguide_info()  # 删除多余存储
 
             return _task
 
     def record_trajectories_update_task(self, interval: float = 1.) -> Callable[[], None]:
         """创建轨迹字典记录的更新任务"""
+
         def _wrapper():
             # 只有到整数时记录数据
             if SimStatus.sim_time_stamp % interval:
@@ -189,6 +198,7 @@ class NaiveSimInfoStorage:
 
 class ArterialSimInfoStorage(NaiveSimInfoStorage):
     """新增干线的运行数据存储"""
+
     def __init__(self):
         super().__init__()
         self.transition_status: Dict[str, TransitionIntersection] = {}
@@ -198,4 +208,3 @@ class ArterialSimInfoStorage(NaiveSimInfoStorage):
         super().reset()
         self.transition_status.clear()
         self.vehicle_controller.clear_speedguide_info()
-

@@ -17,6 +17,7 @@ from typing import List, Dict, Optional, Callable, Union, Iterable
 
 import simulation.lib.config as config
 from simulation.lib.common import logger, singleton, timer
+from simulation.lib.config import SimulationConfig, CONFIG_MSG_NAME
 from simulation.lib.public_conn_data import DataMsg, OrderMsg, SpecialDataMsg, DetailMsgType, PubMsgLabel
 from simulation.lib.public_data import ImplementTask, InfoTask, BaseTask, SimStatus
 from simulation.lib.sim_data import NaiveSimInfoStorage, ArterialSimInfoStorage
@@ -34,72 +35,82 @@ import traci
 
 
 @singleton
-class SimCore:
+class Simulation:
     """仿真主体"""
 
-    def __init__(self, sumo_cfg_fp: str, network_fp: str = None, arterial_storage: bool = False):
+    def __init__(self, arterial_storage: bool = config.SetupConfig.arterial_mode):
         """
 
         Args:
-            sumo_cfg_fp: sumo cfg文件路径
-            network_fp: 路网文件路径
             arterial_storage:
         """
-        self._cfg_fp = sumo_cfg_fp
-        self._net_fp = network_fp
-        self.net = sumolib.net.readNet(network_fp, withLatestPrograms=True)  # 路网对象化数据
-        self.connection = MQTTConnection()  # 通信接口实现数据外部交互
-        self.step_limit = None  # 默认限制仿真运行时间, None为无限制
+        self.sim_core = SimCoreSUMO()
         self.storage = ArterialSimInfoStorage() if arterial_storage else NaiveSimInfoStorage()  # 仿真部分数据存储
         # 允许创建任务的函数返回一系列任务或单个任务，目的是为了保证不同类型的task creator函数只有单个
         # self.internal_task_creator: List[Callable[[], Union[Sequence[BaseTask], BaseTask]]] = []
+
         self.task_create_func: Dict[DetailMsgType,
                                     Callable[[Union[dict, str]], Optional[Union[BaseTask, Iterable[BaseTask]]]]] = {}
         self.cycle_task_queue: List[BaseTask] = []
         self.single_task_queue: List[BaseTask] = []
 
-    def initialize(self, route_fp: str = None, detector_fp: Optional[str] = None, step_limit: int = None,
-                   step_len: float = None):
+    def initialize_sumo(self,
+                        sumo_cfg_fp: str,
+                        network_fp: str,
+                        route_fp: str,
+                        detector_fp: str,
+                        sim_time_len: float,
+                        sim_time_limit: Optional[int] = None):
         """
         初始化SUMO路网
         Args:
+            sumo_cfg_fp: sumo cfg文件路径
+            network_fp: 路网文件路径
             route_fp: 车辆路径文件路径
             detector_fp: 检测器文件路径
-            step_limit: 限制仿真运行时间(s), None为无限制
-            step_len: 仿真单步时长
+            sim_time_len: 仿真单步时长
+            sim_time_limit: 仿真时长限制
 
         Returns:
 
         """
+        # 初始化地图
+
         sumoBinary = sumolib.checkBinary('sumo-gui')
-        sumoCmd = [sumoBinary, '-c', self._cfg_fp]
-        if self._net_fp is not None:
-            sumoCmd.extend(['-n', self._net_fp])
+        sumoCmd = [sumoBinary, '-c', sumo_cfg_fp]
+        if network_fp is not None:
+            sumoCmd.extend(['-n', network_fp])
         if route_fp is not None:
             sumoCmd.extend(['-r', route_fp])
         if detector_fp is not None:
             sumoCmd.extend(['-a', detector_fp])
-        if step_len is not None:
-            sumoCmd.extend(['--step-length', str(step_len)])
+        if sim_time_len is not None:
+            sumoCmd.extend(['--step-length', str(sim_time_len)])
         traci.start(sumoCmd)
-        self.step_limit = step_limit
-        self.storage.quick_init_update_execute(self.net, set(config.SimulationConfig.junction_region))
+
+        self.sim_core.sim_time_limit = sim_time_limit
 
         # 运行仿真后添加订阅消息
-        self.storage.initialize_sub_after_start()
+        self.storage.initialize_subscribe_after_start()
 
-    def initialize_internal_storage(self, *, junction_list=None):
-        """仿真内部各功能模块初始化"""
-        self.storage.initialize_sc(self.net, junction_list=junction_list)
-        self.storage.initialize_participant(self.net, junction_list=junction_list)
+    def initialize_storage(self, network_fp, *, junction_list=None,
+                           trajectory_feature: bool = True,
+                           traffic_flow_feature: bool = False,
+                           ):
+        """平台内部各功能模块仿真场景范围初始化"""
 
-    def connect(self, broker: str, port: int, topics=None):
-        """通过MQTT通信完成与服务器的连接"""
-        self.connection.connect(broker, port, topics)
+        self.sim_core.load_net(network_fp)
+        self.storage.initialize_sc(self.sim_core.net, junction_list=junction_list)
+        self.storage.initialize_participant(self.sim_core.net, junction_list=junction_list)
 
-    def is_connected(self):
-        """通信是否处于连接状态"""
-        return self.connection.state
+        self.storage.initialize_update_execute(self.sim_core.net,
+                                               nodes=junction_list,
+                                               trajectory_update=trajectory_feature,
+                                               traffic_flow_update=traffic_flow_feature)
+
+    # def connect(self, broker: str, port: int, topics=None):
+    #     """通过MQTT通信完成与服务器的连接"""
+    #     self.connection.connect(broker, port, topics)
 
     def add_new_task(self, new_task: BaseTask):
         if new_task.cycle_time is None:
@@ -107,16 +118,22 @@ class SimCore:
         else:
             heapq.heappush(self.cycle_task_queue, new_task)
 
-    def run(self):
+    def run(self, connection: MQTTConnection, sim_time_limit: Optional[int] = None):
+        """
+
+        Args:
+            connection: 实现数据外部交互的MQTT通信接口
+            sim_time_limit: 限制仿真运行时间(s), None为无限制
+
+        Returns:
+
+        """
         logger.info('仿真开始')
         while traci.simulation.getMinExpectedNumber() >= 0:
-            traci.simulationStep(0)
-            # time.sleep(0.1)  # 临时加入
 
-            current_timestamp = traci.simulation.getTime()
-            SimStatus.time_rolling(current_timestamp)
+            current_sim_time = self.sim_core.run_single_step()
             self.storage.update_storage()  # 执行storage更新任务
-            self.handle_current_msg()  # 处理接收到的数据类消息，转化成控制任务
+            self.handle_current_msg(connection)  # 处理接收到的数据类消息，转化成控制任务
 
             # 周期执行任务
             if len(self.cycle_task_queue):
@@ -130,7 +147,7 @@ class SimCore:
                 while top_task.exec_time == SimStatus.sim_time_stamp:
                     success, msg_label = top_task.execute()
                     if msg_label is not None and success:
-                        self.connection.publish(msg_label)
+                        connection.publish(msg_label)
                     top_task.exec_time = round(top_task.cycle_time + top_task.exec_time, 3)  # 防止浮点数运算时精度损失
 
                     heapq.heappop(self.cycle_task_queue)
@@ -149,7 +166,7 @@ class SimCore:
                         success, msg_label = top_task.execute()  # 返回结果: 执行是否成功, 需要发送的消息Optional[PubMsgLabel]
                         start2 = time.time()
                         if msg_label is not None and success:
-                            self.connection.publish(msg_label)
+                            connection.publish(msg_label)
                         end1 = time.time()
                         print(end1 - start2, start2 - start1)
                 elif top_task.exec_time > SimStatus.sim_time_stamp:
@@ -159,7 +176,7 @@ class SimCore:
             end = time.time()
             # print(f'execute task consume time {end - start}')
 
-            if self.step_limit is not None and current_timestamp > self.step_limit:
+            if sim_time_limit is not None and current_sim_time > sim_time_limit:
                 break  # 完成仿真任务提前终止仿真程序
 
         logger.info('仿真结束')
@@ -168,7 +185,6 @@ class SimCore:
 
     def _reset(self):
         """运行仿真结束后重置仿真状态"""
-        self.step_limit = None
         self.storage.reset()
 
     def register_task_creator(self, msg_type: DetailMsgType,
@@ -182,10 +198,10 @@ class SimCore:
         self.task_create_func[SpecialDataMsg.TransitionSS] = ...  # TODO: 过渡方案，要求获取signal_scheme的task
         self.task_create_func[SpecialDataMsg.SERequirement] = ...
 
-    def handle_current_msg(self):
+    def handle_current_msg(self, connection: MQTTConnection):
         """处理通过通信获得的消息，并转换成Tasks"""
         # 处理标准消息
-        for msg_type, msg_info in self.connection.loading_msg(DataMsg):
+        for msg_type, msg_info in connection.loading_msg(DataMsg):
             handler_func = self.task_create_func.get(msg_type)
             if handler_func is None:
                 pass  # TODO: 不处理
@@ -321,6 +337,42 @@ class SimCore:
 
 
 """测评系统与仿真无关的内容均以事件形式定义(如生成json轨迹文件，发送评分等)，处理事件的函数的入参以关键词参数形式传入，返回值固定为None"""
+
+
+class SimCoreSUMO:
+    def __init__(self):
+        self._net = None
+        self._sim_time_limit = None
+
+    def load_net(self, network_fp: str):
+        self._net = sumolib.net.readNet(network_fp, withLatestPrograms=True)  # 静态路网对象化数据
+
+    @property
+    def net(self):
+        if self._net is None:
+            raise RuntimeError('sumo core has not been initialize')
+        return self._net
+
+    @property
+    def sim_time_limit(self):
+        return self._sim_time_limit
+
+    @sim_time_limit.setter
+    def sim_time_limit(self, value: Optional[int]):
+        if isinstance(value, int) and value < 0:
+            raise ValueError('simulation time limit must be greater than 0')
+        self._sim_time_limit = value
+
+    def run_single_step(self) -> float:
+        traci.simulationStep(0)
+        sim_time = traci.simulation.getTime()
+        SimStatus.time_rolling(sim_time)
+        return sim_time
+
+    def reach_limit(self):
+        if self.sim_time_limit is not None and traci.simulation.getTime() > self.sim_time_limit:
+            return True
+        return False
 
 
 class EvalEventType(Enum):
@@ -482,40 +534,43 @@ def initialize_score_prepare():
 @singleton
 class AlgorithmEval:
     def __init__(self):
-        self.sim = SimCore(config.SetupConfig.config_file_path,
-                           config.SetupConfig.network_file_path,
-                           config.SetupConfig.arterial_mode)
+        self.sim = Simulation()
         self.testing_name: str = config.SetupConfig.test_name
         self.eval_record: Dict[str, dict] = {}
-        self.__eval_start_func: Optional[Callable[[], None]] = None
-
-        # 通信
-        self.sim.connect(config.ConnectionConfig.broker, config.ConnectionConfig.port)
-
-        # 注册任务生成函数
-        self.sim.quick_register_task_creator_all()
-
-        # 初始化内部仿真内部功能模块
-        self.sim.initialize_internal_storage(junction_list=config.SimulationConfig.junction_region)
+        self.__eval_start_func: Optional[Callable] = None
 
         # 仿真运行开始方式
-        self.mode_setting(config.SetupConfig.is_route_directory(),
-                          config.SetupConfig.route_file_path,
-                          detector_fp=config.SetupConfig.detector_file_path)
+        self.mode_setting(config.SetupConfig.route_file_path,
+                          config.SetupConfig.is_route_directory())
 
         # 注册仿真各环节触发的事件
         self.auto_initialize_event()
 
-    def sim_task_start(self, route_fp: str, detector_fp: Optional[str] = None, step_limit: int = None, step_len: float = None):
-        self.sim.initialize(route_fp, detector_fp, step_limit, step_len)
-        self.sim.run()
+    def initialize_storage(self):
+        # 初始化内部仿真内部功能模块，先于simulation初始化
+        self.sim.initialize_storage(config.SetupConfig.network_file_path,
+                                    junction_list=config.SimulationConfig.junction_region,
+                                    traffic_flow_feature=any(msg.name == CONFIG_MSG_NAME['TF'] for msg in SimulationConfig.pub_msgs))
+
+    def _initialize_simulation(self, route_fp: str):
+        self.sim.initialize_sumo(sumo_cfg_fp=config.SetupConfig.config_file_path,
+                                 network_fp=config.SetupConfig.network_file_path,
+                                 route_fp=route_fp,
+                                 detector_fp=config.SetupConfig.detector_file_path,
+                                 sim_time_len=config.SimulationConfig.sim_time_step,
+                                 sim_time_limit=config.SimulationConfig.sim_time_limit)
+        # 注册任务生成函数
+        self.sim.quick_register_task_creator_all()
+
+    def sim_task_start(self, connection: MQTTConnection):
+        self.sim.run(connection=connection)
         emit_eval_event(EvalEventType.FINISH_TASK, sim_core=self.sim, eval_record=self.eval_record,
                         trajectories=self.sim.storage.trajectory_info)
 
         traci.close()
 
         # using for test
-        self.eval_task_start(connection=self.sim.connection)
+        self.eval_task_start(connection=connection)
 
     def eval_task_start(*args, **kwargs):
         emit_eval_event(EvalEventType.START_EVAL, *args, **kwargs)
@@ -525,17 +580,18 @@ class AlgorithmEval:
     def auto_initialize_event():
         initialize_score_prepare()
 
-    def sim_task_from_directory(self, sce_dir_fp: str, detector_fp: Optional[str], *, f_name_startswith: str = None,
-                                step_limit: int = None, step_len: float = None):
+    def sim_task_single_scenario(self, connection: MQTTConnection, route_fp: str):
+        self._initialize_simulation(route_fp)
+        self.sim_task_start(connection)
+
+    def sim_task_from_directory(self, connection: MQTTConnection, sce_dir_fp: str, *, f_name_startswith: str = None):
         """
         从文件夹中读取所有流量文件创建评测任务
 
         Args:
+            connection: MQTT通信连接
             sce_dir_fp: route文件所在文件夹
-            detector_fp: 检测器文件
             f_name_startswith: 指定route文件命名开头
-            step_limit: 仿真总时长
-            step_len: 仿真步长
 
         Returns:
 
@@ -545,59 +601,53 @@ class AlgorithmEval:
             if f_name_startswith is None or file.startswith(f_name_startswith):
                 route_fps.append('/'.join((sce_dir_fp, file)))
         for route_fp in route_fps:
-            self.sim_task_start(route_fp, detector_fp, step_limit, step_len)
+            self._initialize_simulation(route_fp=route_fp)
+            self.sim_task_start(connection)
 
-    def mode_setting(self, multiple_file: bool, route_fp: str, *, detector_fp: Optional[str] = None) -> None:
+    def mode_setting(self, route_fp: str, multiple_file: bool) -> None:
         """
         调用loop_start前，指定测评时流量文件读取模式
         Args:
+            route_fp: 路径文件/目录地址
             multiple_file: 是否为单个文件
-            route_fp: route文件路径
-            detector_fp: 检测器文件
 
         Returns:
 
         """
         if multiple_file:
-            self.__eval_start_func = partial(self.sim_task_from_directory,
-                                             sce_dir_fp=route_fp,
-                                             detector_fp=detector_fp,
-                                             step_limit=config.SimulationConfig.sim_time_limit,
-                                             step_len=config.SimulationConfig.sim_time_step)
+            self.__eval_start_func = partial(self.sim_task_from_directory, sce_dir_fp=route_fp)
         else:
-            self.__eval_start_func = partial(self.sim_task_start,
-                                             route_fp=route_fp,
-                                             detector_fp=detector_fp,
-                                             step_limit=config.SimulationConfig.sim_time_limit,
-                                             step_len=config.SimulationConfig.sim_time_step)
+            self.__eval_start_func = partial(self.sim_task_single_scenario, route_fp=route_fp)
 
-    def loop_start(self, test_name_split: str = ' '):
+    def loop_start(self, connection: MQTTConnection, *, test_name_split: str = ' '):
         """
         阻塞形式开始测评，接受start命令后开始运行
         Args:
+            connection: MQTT通信连接
             test_name_split: start指令中提取算法名称的分割字符，取最后一部分为测试的名称
 
         Returns:
 
         """
         sim = self.sim
-        if not sim.is_connected():
-            raise RuntimeError('与服务器处于未连接状态,请先创建连接')
+        # TODO: 挪到MQTT里
+        # if not sim.is_connected():
+        #     raise RuntimeError('与服务器处于未连接状态,请先创建连接')
         while True:
-            recv_msgs = sim.connection.loading_msg(OrderMsg)
+            recv_msgs = connection.loading_msg(OrderMsg)
 
             # 有数据时会才会进入循环
             for msg_type, msg_ in recv_msgs:
                 print(msg_)
                 if msg_type is OrderMsg.Start:
                     self.testing_name = msg_['docker'].split(test_name_split)[-1]  # 获取分割后的最后一部分作为测试名称
-                    self.__eval_start_func()
+                    self.__eval_start_func(connection)
 
-                    self.eval_task_start(connection=self.sim.connection)
+                    self.eval_task_start(connection=connection)
 
-    def start(self):
+    def start(self, connection: MQTTConnection):
         """运行仿真测评"""
         if config.SetupConfig.await_start_cmd:
-            self.loop_start()
+            self.loop_start(connection)
         else:
-            self.__eval_start_func()
+            self.__eval_start_func(connection)
