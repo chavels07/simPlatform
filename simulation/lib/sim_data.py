@@ -26,7 +26,7 @@ class TransitionIntersection:
     current_phase_index: int
 
 
-class NaiveSimInfoStorage:
+class SimInfoStorage:
     """针对单点交叉口的运行数据存储"""
 
     def __init__(self):
@@ -196,7 +196,7 @@ class NaiveSimInfoStorage:
         self.vehicle_controller.clear_speedguide_info()
 
 
-class ArterialSimInfoStorage(NaiveSimInfoStorage):
+class ArterialSimInfoStorage(SimInfoStorage):
     """新增干线的运行数据存储"""
 
     def __init__(self):
