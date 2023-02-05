@@ -78,22 +78,18 @@ class MQTTConnection:
 
 
 class MessageTransfer:
-    __order_queue = Queue(maxsize=1024)
-    __data_queue = Queue(maxsize=1024)
-    __special_queue = Queue(maxsize=1024)
-    # __msg_queue = Queue(maxsize=1024)
-    # __sub_msg_queue = Queue(maxsize=1024)
+    msg_queue_collections = {
+        DataMsg: Queue(maxsize=1024),
+        SpecialDataMsg: Queue(maxsize=1024),
+        OrderMsg: Queue(maxsize=1024)
+    }
 
     @classmethod
     def append(cls, msg_type: DetailMsgType, msg_payload: dict):
-        if isinstance(msg_type, DataMsg):
-            cls.__data_queue.put_nowait((msg_type, msg_payload))
-        elif isinstance(msg_type, SpecialDataMsg):
-            cls.__special_queue.put_nowait((msg_type, msg_payload))
-        elif isinstance(msg_type, OrderMsg):
-            cls.__order_queue.put_nowait((msg_type, msg_payload))
-        else:
-            logger.debug('unspecified message type')
+        msg_queue = cls.msg_queue_collections.get(msg_type)
+        if msg_queue is None:
+            raise TypeError('unspecified message type')
+        msg_queue.put_nowait((msg_type, msg_payload))
 
     @classmethod
     def loading_msg(cls, msg_type: Type[DetailMsgType]) -> Iterator[Tuple[DetailMsgType, MsgInfo]]:
@@ -101,14 +97,10 @@ class MessageTransfer:
         获取当前的所有消息，使用for循环读取
         Returns: 生成器:(消息的类型, 内容对应的字典)，可能为空
         """
-        if msg_type == DataMsg:
-            _pop_queue = cls.__data_queue
-        elif msg_type == SpecialDataMsg:
-            _pop_queue = cls.__special_queue
-        elif msg_type == OrderMsg:
-            _pop_queue = cls.__order_queue
-        else:
+        _pop_queue = cls.msg_queue_collections.get(msg_type)
+        if _pop_queue is None:
             raise TypeError(f'wrong message type: {msg_type}')
+
         if _pop_queue.empty():
             yield from ()  # 生成一个空的迭代器
 
