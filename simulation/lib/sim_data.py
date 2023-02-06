@@ -4,14 +4,14 @@
 # @Description : 存放仿真运行环节需要记录的数据
 
 from dataclasses import dataclass
-from typing import Tuple, Dict, Callable, Any, Optional, List, Set, Iterable
+from typing import Tuple, Dict, Callable, Optional, List, Iterable
 
 import sumolib
 import traci
 
 from simulation.lib.common import logger, timer
 from simulation.lib.public_data import ImplementTask, InfoTask, signalized_intersection_name_str, SimStatus
-from simulation.information.traffic import Flow
+from simulation.information.traffic import FlowStopLine
 from simulation.information.participants import JunctionVehContainer
 from simulation.application.signal_control import SignalController
 from simulation.application.vehicle_control import VehicleController
@@ -52,7 +52,7 @@ class SimInfoStorage:
     """
 
     def __init__(self):
-        self.flow_status = Flow()  # 流量信息存储
+        self.flow_cons: Optional[Dict[str, FlowStopLine]] = None
         self.signal_controllers: Optional[Dict[str, SignalController]] = None  # 信号转换计划
         self.junction_veh_cons: Optional[Dict[str, JunctionVehContainer]] = None  # 交叉口范围车辆管理器
         self.vehicle_controller = VehicleController()  # 车辆控制实例
@@ -60,55 +60,84 @@ class SimInfoStorage:
 
         self.update_module_method: List[Callable[[], None]] = []
 
-    def initialize_sc(self, net: sumolib.net.Net, junction_list: Iterable[str] = None):
-        """
-        初始化sc控制器
-        Args:
-            net: 静态路网数据
-            junction_list: 所需选定的交叉口范围
+    # def initialize_sc(self, net: sumolib.net.Net, junction_list: Iterable[str] = None):
+    #     """
+    #     初始化sc控制器
+    #     Args:
+    #         net: 静态路网数据
+    #         junction_list: 所需选定的交叉口范围
+    #
+    #     Returns:
+    #
+    #     """
+    #     SignalController.load_net(net)  # 初始化signal controller的地图信息
+    #     if junction_list is None:
+    #         junction_list = self._get_all_signalized_junction(net)
+    #
+    #     scs = {SignalController(node_id) for node_id in junction_list}
+    #     self.signal_controllers = scs
+    #
+    # def initialize_traffic_flow(self, net: sumolib.net.Net, junction_list: Iterable[str] = None):
+    #     if junction_list is None:
+    #         junction_list = self._get_all_signalized_junction(net)
+    #
+    #     flow_containers = {FlowStopLine(node_id) for node_id in junction_list}
+    #     self.flow_cons = flow_containers
+    #
+    # def initialize_participant(self, net: sumolib.net.Net, junction_list: Iterable[str] = None):
+    #     """
+    #     初始化交叉口车辆管理器
+    #     Args:
+    #         net: 静态路网数据
+    #         junction_list: 所需选定的交叉口范围
+    #
+    #     Returns:
+    #
+    #     """
+    #     JunctionVehContainer.load_net(net)
+    #     if junction_list is None:
+    #         junction_list = self._get_all_signalized_junction(net)
+    #
+    #     junction_veh_cons = {}
+    #     for junction in junction_list:
+    #         junction_veh_con = JunctionVehContainer(junction)
+    #         junction_veh_cons[junction] = junction_veh_con
+    #     self.junction_veh_cons = junction_veh_cons
 
-        Returns:
+    def _initialize_storage_unit(self, unit_type_str: str, net: sumolib.net.Net, junction_list: Iterable[str] = None):
+        factory = {
+            'sc': SignalController,
+            'tf': FlowStopLine,
+            'ptc': JunctionVehContainer
+        }
+        if unit_type_str not in factory:
+            raise KeyError(f'Unknown storage unit type {unit_type_str}')
+        unit_type = factory[unit_type_str]
 
-        """
-        SignalController.load_net(net)  # 初始化signal controller的地图信息
         if junction_list is None:
-            junction_list = (node.getID() for node in net.getNodes() if node.getType() == 'traffic_light')
+            junction_list = self._get_all_signalized_junction(net)
 
-        scs = {}
-        for node_id in junction_list:
-            sc = SignalController(node_id)
-            scs[node_id] = sc
-        self.signal_controllers = scs
+        flow_containers = {node_id: unit_type(node_id) for node_id in junction_list}
+        return flow_containers
+
+    def initialize_signal_controller(self, net: sumolib.net.Net, junction_list: Iterable[str] = None):
+        SignalController.load_net(net)
+        self.signal_controllers = self._initialize_storage_unit('sc', net, junction_list)
+
+    def initialize_traffic_flow(self, net: sumolib.net.Net, junction_list: Iterable[str] = None):
+        FlowStopLine.load_net(net)
+        self.flow_cons = self._initialize_storage_unit('tf', net, junction_list)
 
     def initialize_participant(self, net: sumolib.net.Net, junction_list: Iterable[str] = None):
-        """
-        初始化交叉口车辆管理器
-        Args:
-            net: 静态路网数据
-            junction_list: 所需选定的交叉口范围
-
-        Returns:
-
-        """
         JunctionVehContainer.load_net(net)
-        if junction_list is None:
-            junction_list = (node.getID() for node in net.getNodes() if node.getType() == 'traffic_light')
+        self.junction_veh_cons = self._initialize_storage_unit('ptc', net, junction_list)
 
-        junction_veh_cons = {}
-        for junction in junction_list:
-            central_x, central_y = net.getNode(junction).getCoord()
-            junction_veh_con = JunctionVehContainer(junction, central_x, central_y)
-            junction_veh_cons[junction] = junction_veh_con
-        self.junction_veh_cons = junction_veh_cons
-
-    def initialize_update_execute(self, net: sumolib.net.Net, nodes: Iterable[str] = None,
+    def initialize_update_execute(self,
                                   trajectory_update: bool = True,
                                   traffic_flow_update: bool = False):
         """
         快速初始化每一步对sim_data数据更新需要执行的函数
         Args:
-            net: 地图文件
-            nodes: 选定的nodes
             trajectory_update: 执行车辆轨迹更新
             traffic_flow_update: 执行TrafficFlow更新
 
@@ -118,8 +147,9 @@ class SimInfoStorage:
         """
         # 如果需要发送TrafficFlow，添加更新TF方法
         if traffic_flow_update:
-            self.flow_status.initialize_counter(net, set(nodes))
-            self.update_module_method.append(self.flow_status.flow_update_task())
+            # self.flow_status.initialize_counter(net, set(nodes))
+            # self.update_module_method.append(self.flow_status.flow_update_task())
+            self.update_module_method.append(self.traffic_flow_update_task())
         # 添加更新车辆信息方法，用于发送BSM/RSM或记录轨迹信息
         if trajectory_update:
             for container in self.junction_veh_cons.values():
@@ -222,15 +252,44 @@ class SimInfoStorage:
 
         return _wrapper
 
+    def traffic_flow_update_task(self, interval: float = 1.) -> Callable[[], None]:
+
+        def _wrapper():
+            if SimStatus.sim_time_stamp % interval:
+                return None
+            for junction_id, flow_container in self.flow_cons.items():
+                veh_container = self.junction_veh_cons.get(junction_id)
+
+                if veh_container is None:
+                    raise RuntimeError(f'traffic flow cannot be updated before initialize participant for junction {junction_id}')
+                curr_veh_info = veh_container.vehs_info
+                flow_container.update_vehicle_cache(curr_veh_info)
+
+        return _wrapper
+
     def update_storage(self):
         """执行数据模块中需要执行的更新操作"""
         for update_func in self.update_module_method:
             update_func()
 
+    def _reset_storage_unit(self, *units):
+        for unit in units:
+            if unit is None:
+                return None
+
+            for unit_obj in unit.values():
+                if hasattr(unit_obj, 'reset'):
+                    unit_obj.reset()  # 调用类定义的reset方法重置存储状态
+
     def reset(self):
         """清空当前保存的运行数据"""
-        self.flow_status.clear()
+        self._reset_storage_unit(self.flow_cons, self.signal_controllers, self.junction_veh_cons)
         self.vehicle_controller.clear_speedguide_info()
+        self.trajectory_info = {}
+
+    @staticmethod
+    def _get_all_signalized_junction(net: sumolib.net.Net):
+        return (node.getID() for node in net.getNodes() if node.getType() == 'traffic_light')
 
 
 class ArterialSimInfoStorage(SimInfoStorage):
@@ -243,5 +302,5 @@ class ArterialSimInfoStorage(SimInfoStorage):
     def reset(self):
         """清空当前保存的运行数据"""
         super().reset()
-        self.transition_status.clear()
+        self._reset_storage_unit(self.trajectory_info)
         self.vehicle_controller.clear_speedguide_info()
