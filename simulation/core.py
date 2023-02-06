@@ -7,6 +7,7 @@ import os
 import sys
 import json
 import subprocess
+import time
 import heapq
 
 from collections import defaultdict, abc
@@ -104,12 +105,11 @@ class Simulation:
         """平台内部各功能模块仿真场景范围初始化"""
 
         self.sim_core.load_net(network_fp)
-        self.storage.initialize_sc(self.sim_core.net, junction_list=junction_list)
+        self.storage.initialize_signal_controller(self.sim_core.net, junction_list=junction_list)
+        self.storage.initialize_traffic_flow(self.sim_core.net, junction_list=junction_list)
         self.storage.initialize_participant(self.sim_core.net, junction_list=junction_list)
 
-        self.storage.initialize_update_execute(self.sim_core.net,
-                                               nodes=junction_list,
-                                               trajectory_update=trajectory_feature,
+        self.storage.initialize_update_execute(trajectory_update=trajectory_feature,
                                                traffic_flow_update=traffic_flow_feature)
 
     def run(self, connection: MQTTConnection):
@@ -128,11 +128,14 @@ class Simulation:
             3) 处理通信接收到的控制命令，转化成控制任务
             4) 维护任务池执行当前步需完成的任务
         """
+        self._reset()  # 预先清楚上一次仿真运行可能遗留的数据
+
         logger.info('仿真开始')
         while traci.simulation.getMinExpectedNumber() >= 0:
 
             self.sim_core.run_single_step()
             self.storage.update_storage()  # 执行storage更新任务
+            # time.sleep(0.1)
 
             # 处理接收到的数据类消息，转化成控制任务
             for msg_type, msg_info in connection.loading_msg(DataMsg):
@@ -146,13 +149,12 @@ class Simulation:
                 break  # 完成仿真任务提前终止仿真程序
 
         logger.info('仿真结束')
-        self._reset()
         SimStatus.reset()  # 仿真状态信息重置
 
     def _reset(self):
         """运行仿真结束后重置仿真状态"""
         self.storage.reset()
-        self.task_queue.reset()
+        self.task_queue.reset(single_only=True)
 
     def quick_register_task_creator_all(self):
         """快速注册从接收的数据转换成任务的处理方法"""
@@ -318,9 +320,10 @@ class TaskQueue:
         """
         self._task_create_func[msg_type] = handler_func
 
-    def reset(self):
+    def reset(self, single_only: bool = False):
         """重置任务池"""
-        self.cycle_task_queue.clear()
+        if not single_only:
+            self.cycle_task_queue.clear()
         self.single_task_queue.clear()
 
     def activate_spat_publish(self, storage: SimInfoStorage, intersections: List[str] = None, pub_cycle: float = 0.1):
@@ -343,7 +346,7 @@ class TaskQueue:
             for ints_id in intersections:
                 sc = storage.signal_controllers.get(ints_id)
                 if sc is None:
-                    raise KeyError(f'intersection {ints_id} is not in current map')
+                    raise KeyError(f'cannot find intersection {ints_id} in storage')
                 self.add_new_task(
                     InfoTask(exec_func=sc.create_spat_pub_msg, cycle_time=pub_cycle, task_name=f'SPAT-{ints_id}'))
 
@@ -368,7 +371,7 @@ class TaskQueue:
             for ints_id in intersections:
                 sc = storage.signal_controllers.get(ints_id)
                 if sc is None:
-                    raise KeyError(f'intersection {ints_id} is not in current map')
+                    raise KeyError(f'cannot find intersection {ints_id} in storage')
                 self.add_new_task(
                     InfoTask(exec_func=sc.create_signal_execution_pub_msg, cycle_time=pub_cycle,
                              task_name=f'SignalExe-{ints_id}'))
@@ -392,7 +395,7 @@ class TaskQueue:
             for ints_id in intersections:
                 veh_container = storage.junction_veh_cons.get(ints_id)
                 if veh_container is None:
-                    raise KeyError(f'intersection {ints_id} is not current map')
+                    raise KeyError(f'cannot find intersection {ints_id} in storage')
                 self.add_new_task(InfoTask(exec_func=veh_container.create_bsm_pub_msg, cycle_time=pub_cycle,
                                            task_name=f'BSM-{ints_id}'))
 
@@ -415,7 +418,7 @@ class TaskQueue:
             for ints_id in intersections:
                 veh_container = storage.junction_veh_cons.get(ints_id)
                 if veh_container is None:
-                    raise KeyError(f'intersection {ints_id} is not current map')
+                    raise KeyError(f'cannot find intersection {ints_id} in storage')
                 self.add_new_task(InfoTask(exec_func=veh_container.create_rsm_pub_msg, cycle_time=pub_cycle,
                                            task_name=f'RSM-{ints_id}'))
 
@@ -431,10 +434,17 @@ class TaskQueue:
         Returns:
 
         """
-        self.add_new_task(
-            InfoTask(storage.flow_status.create_traffic_flow_pub_msg, args=(intersections,), cycle_time=pub_cycle,
-                     task_name=f'TrafficFlow'))
-
+        if intersections is None:
+            for ints_id, flow_container in storage.flow_cons.items():
+                self.add_new_task(InfoTask(exec_func=flow_container.create_traffic_flow_pub_msg, cycle_time=pub_cycle,
+                                           task_name=f'TF-{ints_id}'))
+        else:
+            for ints_id in intersections:
+                flow_container = storage.flow_cons.get(ints_id)
+                if flow_container is None:
+                    raise KeyError(f'cannot find intersection {ints_id} in storage')
+                self.add_new_task(InfoTask(exec_func=flow_container.create_traffic_flow_pub_msg, cycle_time=pub_cycle,
+                                           task_name=f'TF-{ints_id}'))
 
 @singleton
 class AlgorithmEval:

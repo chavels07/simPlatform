@@ -253,11 +253,10 @@ class JunctionVehContainer:
     #         self.trajectory: Dict[str, dict] = {}
     #         self.last_update_time = -1
 
-    def __init__(self, junction_id: str, central_x: float, central_y: float):
+    def __init__(self, junction_id: str):
         self.junction_id = junction_id
-        self.central_x = central_x
-        self.central_y = central_y
-        self.central_lon, self.central_lat = self._net.convertXY2LonLat(central_x, central_y)
+        self.central_x, self.central_y = self._net.getNode(junction_id).getCoord()
+        self.central_lon, self.central_lat = self._net.convertXY2LonLat(self.central_x, self.central_y)
         self.vehs_info: List[VehInfo] = []
         self.node_info = create_NodeReferenceID(signalized_intersection_name_decimal(self.junction_id))
 
@@ -273,7 +272,7 @@ class JunctionVehContainer:
 
     def update_vehicle_info(self) -> None:
         """更新交叉口范围内车辆信息，用于后续构造消息或记录轨迹"""
-        self.vehs_info.clear()  # 清空当前的vehicle数据
+        self.vehs_info = []  # 重置当前的vehicle数据
         sub_res = traci.junction.getContextSubscriptionResults(self.junction_id)
         for veh_id, sub_veh_info in sub_res.items():
             veh_id_num = veh_name_from_flow_decimal(veh_id)
@@ -375,3 +374,6 @@ class JunctionVehContainer:
         """创建RSM的推送消息"""
         newly_rsm = self.get_rsm()
         return True, PubMsgLabel(newly_rsm, DataMsg.RoadsideSafetyMessage, convert_method='flatbuffers')
+
+    def reset(self):
+        self.vehs_info = []
