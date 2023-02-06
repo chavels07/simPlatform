@@ -27,7 +27,29 @@ class TransitionIntersection:
 
 
 class SimInfoStorage:
-    """针对单点交叉口的运行数据存储"""
+    """存储仿真系统平台所需使用的运行数据
+
+    Notes:
+        ----------使用说明----------
+        初始化过程:
+        1) load_net                                  # 加载路网
+        2) initialize_sc/initialize_participant      # 信号机/交通参与者记录模块状态初始化
+        3) initialize_update_execute                 # 注册各模块状态更新函数
+        4) storage.initialize_subscribe_after_start  # 添加订阅信息(必须等待SUMO启动后才能初始化)
+
+        仿真运行更新过程:
+        update_storage  # 调用各模块已注册的更新方法
+
+        仿真结束:
+        reset           # 重置仿真数据状态
+
+        ----------外部更新----------
+        Storage及SUMO仿真可通过外部控制命令更新信号灯、交通参与者等状态
+        任意模块或对象状态更新需要提供create_xxx_task方法，输入控制命令对应的dict，输出ImplementTask实例
+        所控制模块(信号灯、交通参与者等)的内部状态更新也在方法中执行，ImplementTask的生成可在模块内部完成，也可在该方法中
+        控制命令响应前需要进行一定的检查(控制对象是否存在、数值合法性检查等)
+
+    """
 
     def __init__(self):
         self.flow_status = Flow()  # 流量信息存储
@@ -39,7 +61,15 @@ class SimInfoStorage:
         self.update_module_method: List[Callable[[], None]] = []
 
     def initialize_sc(self, net: sumolib.net.Net, junction_list: Iterable[str] = None):
-        """初始化sc控制器"""
+        """
+        初始化sc控制器
+        Args:
+            net: 静态路网数据
+            junction_list: 所需选定的交叉口范围
+
+        Returns:
+
+        """
         SignalController.load_net(net)  # 初始化signal controller的地图信息
         if junction_list is None:
             junction_list = (node.getID() for node in net.getNodes() if node.getType() == 'traffic_light')
@@ -54,7 +84,7 @@ class SimInfoStorage:
         """
         初始化交叉口车辆管理器
         Args:
-            net:
+            net: 静态路网数据
             junction_list: 所需选定的交叉口范围
 
         Returns:
@@ -64,19 +94,12 @@ class SimInfoStorage:
         if junction_list is None:
             junction_list = (node.getID() for node in net.getNodes() if node.getType() == 'traffic_light')
 
-        test_node = net.getNode('point93')
-
         junction_veh_cons = {}
         for junction in junction_list:
             central_x, central_y = net.getNode(junction).getCoord()
             junction_veh_con = JunctionVehContainer(junction, central_x, central_y)
             junction_veh_cons[junction] = junction_veh_con
         self.junction_veh_cons = junction_veh_cons
-
-    def update_storage(self):
-        """执行数据模块中需要执行的更新操作"""
-        for update_func in self.update_module_method:
-            update_func()
 
     def initialize_update_execute(self, net: sumolib.net.Net, nodes: Iterable[str] = None,
                                   trajectory_update: bool = True,
@@ -114,6 +137,15 @@ class SimInfoStorage:
                 jun_veh.subscribe_info(region_dis=45)
 
     def create_signal_update_task(self, signal_scheme: dict) -> Optional[ImplementTask]:
+        """
+        根据SignalScheme消息创建信号更新任务
+        Args:
+            signal_scheme: 信号方案消息
+
+        Returns:
+            信号更新的可执行任务
+
+        """
         node = signal_scheme.get('node_id')
         if node is None:
             return None
@@ -189,6 +221,11 @@ class SimInfoStorage:
                 self.trajectory_info.setdefault(junction_id, dict())[str(int(SimStatus.sim_time_stamp))] = trajectories
 
         return _wrapper
+
+    def update_storage(self):
+        """执行数据模块中需要执行的更新操作"""
+        for update_func in self.update_module_method:
+            update_func()
 
     def reset(self):
         """清空当前保存的运行数据"""
