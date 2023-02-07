@@ -6,18 +6,18 @@
 import json
 import random
 import threading
-import time
 from collections import namedtuple
 from queue import Queue
-from typing import Tuple, Dict, Iterator, Iterable, Union, Optional, Any, Type, Callable
+from typing import Tuple, Iterator, Iterable, Union, Type
 
 from paho.mqtt.client import Client, MQTTMessage
 
 from simulation.connection.python_fbconv.fbconv import FBConverter
-from simulation.lib.common import logger, timer
+from simulation.lib.common import logger
 from simulation.lib.public_conn_data import OrderMsg, DataMsg, SpecialDataMsg, DetailMsgType, PubMsgLabel
 
-fb_converter = FBConverter()  # only used here
+FB_CACHE_SIZE = 102400
+fb_converter = FBConverter(FB_CACHE_SIZE)  # only used here
 
 _MsgProperty = namedtuple('MsgProperty', ['topic_name', 'fb_code'])
 MSG_TYPE_INFO = {
@@ -34,7 +34,9 @@ MSG_TYPE_INFO = {
     DataMsg.SignalPhaseAndTiming: _MsgProperty('MECCloud/1/SPAT', 0x18),  # SPAT和BSM原来1均在末位，此处进行调整
     DataMsg.TrafficFlow: _MsgProperty('MECCloud/1/TrafficFlow', 0x25),
     DataMsg.SafetyMessage: _MsgProperty('MECCloud/1/BSM', 0x17),
-    OrderMsg.ScoreReport: _MsgProperty('MECUpload/1/AlgoImageTest', None) # 分数上报
+    DataMsg.RoadsideSafetyMessage: _MsgProperty('MECCloud/1/RSM', 0x1c),
+    DataMsg.SignalExecution: _MsgProperty('MECCloud/1/SignalExecution', 0x30),
+    OrderMsg.ScoreReport: _MsgProperty('MECUpload/1/AlgoImageTest', None)  # 分数上报
 }
 
 MsgInfo = Union[dict, str]  # 从通信获取的message类型为dict or str
@@ -53,7 +55,7 @@ class MQTTConnection:
     #     """向指定topic推送消息，未连接状态则不进行推送"""
     #     return self._state.publish(topic, msg)
 
-    def publish(self, msg_label: 'PubMsgLabel'):
+    def publish(self, msg_label: PubMsgLabel):
         """向指定topic推送消息，未连接状态则不进行推送"""
         return self.__pub_client.publish(msg_label)
 
@@ -76,22 +78,18 @@ class MQTTConnection:
 
 
 class MessageTransfer:
-    __order_queue = Queue(maxsize=1024)
-    __data_queue = Queue(maxsize=1024)
-    __special_queue = Queue(maxsize=1024)
-    # __msg_queue = Queue(maxsize=1024)
-    # __sub_msg_queue = Queue(maxsize=1024)
+    msg_queue_collections = {
+        DataMsg: Queue(maxsize=1024),
+        SpecialDataMsg: Queue(maxsize=1024),
+        OrderMsg: Queue(maxsize=1024)
+    }
 
     @classmethod
     def append(cls, msg_type: DetailMsgType, msg_payload: dict):
-        if isinstance(msg_type, DataMsg):
-            cls.__data_queue.put_nowait((msg_type, msg_payload))
-        elif isinstance(msg_type, SpecialDataMsg):
-            cls.__special_queue.put_nowait((msg_type, msg_payload))
-        elif isinstance(msg_type, OrderMsg):
-            cls.__order_queue.put_nowait((msg_type, msg_payload))
-        else:
-            logger.debug('unspecified message type')
+        msg_queue = cls.msg_queue_collections.get(msg_type)
+        if msg_queue is None:
+            raise TypeError('unspecified message type')
+        msg_queue.put_nowait((msg_type, msg_payload))
 
     @classmethod
     def loading_msg(cls, msg_type: Type[DetailMsgType]) -> Iterator[Tuple[DetailMsgType, MsgInfo]]:
@@ -99,14 +97,10 @@ class MessageTransfer:
         获取当前的所有消息，使用for循环读取
         Returns: 生成器:(消息的类型, 内容对应的字典)，可能为空
         """
-        if msg_type == DataMsg:
-            _pop_queue = cls.__data_queue
-        elif msg_type == SpecialDataMsg:
-            _pop_queue = cls.__special_queue
-        elif msg_type == OrderMsg:
-            _pop_queue = cls.__order_queue
-        else:
+        _pop_queue = cls.msg_queue_collections.get(msg_type)
+        if _pop_queue is None:
             raise TypeError(f'wrong message type: {msg_type}')
+
         if _pop_queue.empty():
             yield from ()  # 生成一个空的迭代器
 
@@ -144,37 +138,6 @@ def on_message(client, user_data, msg: MQTTMessage):
         msg_ = json.loads(msg_value)  # json 转换成 dict
         print(msg_)
         MessageTransfer.append(short_topic, msg_)
-
-    # # 交通事件主题
-    # if msg.topic == 'MECLocal/TrafficEvent':
-    #     info_fb['accident'] = str(msg.payload.decode(encoding="utf-8"))
-    # # 协同引导主题
-    # if msg.topic == 'MECLocal/RSC':
-    #     info_fb['guidance'] = str(msg.payload.decode(encoding="utf-8"))
-    # # 需求输入主题
-    # if msg.topic == 'MECLocal/Demand':
-    #     info_fb['demand'] = str(msg.payload.decode(encoding="utf-8"))
-    # # 可变限速
-    # if msg.topic == 'MECLocal/VSL':
-    #     info_fb['VSL'] = str(msg.payload.decode(encoding="utf-8"))
-    # # 专用车道
-    # if msg.topic == 'MECLocal/DLC':
-    #     info_fb['DLC'] = str(msg.payload.decode(encoding="utf-8"))
-    # # 换道
-    # if msg.topic == 'MECLocal/VMS':
-    #     info_fb['VMS'] = str(msg.payload.decode(encoding="utf-8"))
-    # # 信控方案
-    # if msg.topic == 'MECLocal/SignalScheme':
-    #     info_fb['signal'] = str(msg.payload.decode(encoding="utf-8"))
-    # # 倒计时
-    # if msg.topic == 'MECLocal/SPAT':
-    #     info_fb['cutdown'] = str(msg.payload.decode(encoding="utf-8"))
-    # # 信控方案上传
-    # if msg.topic == 'MECLocal/Wildcard':
-    #     info_fb['getsignal'] = str(msg.payload.decode(encoding="utf-8"))
-    # # 车速引导
-    # if msg.topic == 'MECLocal/SpeedGuide':
-    #     info_fb['SpeedGuide'] = str(msg.payload.decode(encoding="utf-8"))
 
 
 def on_disconnect(client, userdata, rc):
@@ -244,7 +207,6 @@ class PubClient:
         if msg_info.rc != 0:
             logger.info(f'fail to send message to topic {topic}, return code: {msg_info.rc}')
 
-    @timer
     def publish(self, msg_label: PubMsgLabel):
         target_topic, fb_code = MSG_TYPE_INFO.get(msg_label.msg_type)
         if msg_label.multiple:
@@ -258,8 +220,6 @@ class PubClient:
             if fb_code is None:
                 raise ValueError(f'no flatbuffers structure for msg type {msg_type}')
             _msg = json.dumps(raw_msg).encode('utf-8')
-
-            # print(_msg)
 
             success, _msg = fb_converter.json2fb(fb_code, _msg)
             if success != 0:

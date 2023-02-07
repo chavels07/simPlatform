@@ -2,6 +2,51 @@
 
 针对MECData所管理的ZBRS公共数据结构，提供不同序列化格式转换及Flatbuffers间互转功能。
 
+## 预定义的一些数据类型
+类型对应的值  类型名
+```python
+1 MECInfo.fbs
+2 AppStatus.fbs
+3 AppInfo.fbs
+4 DeviceSet.fbs
+5 ErrorImmediateReport.fbs
+6 DeviceOTA.fbs
+7 AppOTA.fbs
+8 DeviceInfo.fbs
+17 VolumeLane.fbs
+18 DensityLane.fbs
+19 SpeedLaneArea.fbs
+20 SpeedLanePoint.fbs
+21 TrafficSign.fbs
+22 TrafficEvent.fbs
+23 SafetyMessage.fbs
+24 SignalPhaseAndTiming.fbs
+25 MAP.fbs
+26 RoadsideCoordination.fbs
+27 RoadSideInformation.fbs
+28 RoadsideSafetyMessage.fbs
+29 VehIntentionAndRequest.fbs
+30 DedicatedLaneControl.fbs
+31 VariableSpeedLimit.fbs
+32 RampMetering.fbs
+33 NowWeather.fbs
+34 ForecastWeather.fbs
+35 ForecastRain.fbs
+36 SignalScheme.fbs
+37 TrafficFlow.fbs
+38 TrajectoryPoints.fbs
+39 QueueLength.fbs
+40 VariableMessageSign.fbs
+41 CarbonEmission.fbs
+48 SignalExecution.fbs
+49 SignalRequest.fbs
+50 CollisionWarning.fbs
+51 RoutePlan.fbs
+52 SpeedGuide.fbs
+240 Ticket.fbs
+255 Wildcard.fbs
+```
+
 ## JSON -> Flatbuffers
 
 以`MSG_SafetyMessage`为例：

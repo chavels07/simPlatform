@@ -184,7 +184,7 @@ def DF_LinkEx(net_node, movements_ex, sections, net):
 
 def Edge_Direction(x1, y1, x2, y2, direction):
     """
-    获取进口道转向对应编号（1-12）
+    获取进口道转向对应编号（1-16）,从正北方向顺时针编号,一个方向存在四个转向(左,直,右,行人)
     :param x1: edge起点横坐标
     :param y1: edge起点纵坐标
     :param x2: edge终点横坐标
@@ -197,29 +197,29 @@ def Edge_Direction(x1, y1, x2, y2, direction):
 
     # 道路方向为正南或正北
     if delta_x == 0 and delta_y > 0:
-        judge = lambda x: {x == 'l': '1', x == 's': '2', x == 'r': '3'}
+        judge = lambda x: {x == 'l': '9', x == 's': '10', x == 'r': '11'}
         return judge(direction)[True]
     elif delta_x == 0 and delta_y < 0:
-        judge = lambda x: {x == 'l': '7', x == 's': '8', x == 'r': '9'}
+        judge = lambda x: {x == 'l': '1', x == 's': '2', x == 'r': '3'}
         return judge(direction)[True]
     # 正南正北外的其他方向
     else:
         slope = delta_y / delta_x
         # 南进口
         if (slope > 1 or slope < -1) and delta_y > 0:
-            judge = lambda x: {x == 'l': '1', x == 's': '2', x == 'r': '3'}
+            judge = lambda x: {x == 'l': '9', x == 's': '10', x == 'r': '11'}
             return judge(direction)[True]
         # 北进口
         elif (slope > 1 or slope < -1) and delta_y < 0:
-            judge = lambda x: {x == 'l': '7', x == 's': '8', x == 'r': '9'}
+            judge = lambda x: {x == 'l': '1', x == 's': '2', x == 'r': '3'}
             return judge(direction)[True]
         # 西进口
         elif -1 < slope < 1 and delta_x > 0:
-            judge = lambda x: {x == 'l': '10', x == 's': '11', x == 'r': '12'}
+            judge = lambda x: {x == 'l': '13', x == 's': '14', x == 'r': '15'}
             return judge(direction)[True]
         # 东进口
         else:
-            judge = lambda x: {x == 'l': '4', x == 's': '5', x == 'r': '6'}
+            judge = lambda x: {x == 'l': '5', x == 's': '6', x == 'r': '7'}
             return judge(direction)[True]
 
 
@@ -234,13 +234,14 @@ def DF_MovementEx(net_node, remote_node, incoming_section, direction, phase_id=0
     :return: Movement字典
     """
     remote_node_id = NodenameToId(remote_node.getID())  # 下游交叉口字符串id转换为整型id
-    direct_to_behavior = lambda x: {x == 's': 0, x == 'l': 1, x == 'r': 2}     # 转向对应behavior编号
+    direct_to_behavior = lambda x: {x == 's': 1, x == 'l': 1 << 1, x == 'r': 1 << 2}     # 转向对应behavior编号，采用bit位的方式表示maneuver
 
     coord_list = incoming_section.getShape()
     (x1, y1) = coord_list[-2]
     (x2, y2) = coord_list[-1]
 
-    ext_id = net_node.getID() + "_" + Edge_Direction(x1, y1, x2, y2, direction)     # Movement_Id
+    # ext_id = net_node.getID() + "_" + Edge_Direction(x1, y1, x2, y2, direction)     # Movement_Id
+    ext_id = Edge_Direction(x1, y1, x2, y2, direction)     # Movement_Id
 
     movement_ex = {
         "remoteIntersection": {
@@ -563,12 +564,12 @@ def SumoToMSG(file_name):
                             lanes = incoming_section_1.getLanes()
                             for lane in lanes:
                                 connection_ex_list = []  # connection列表
-                                direction_lane_dict = {0: [[]], 1: [[]], 2: [[]]}
+                                direction_lane_dict = {1: [[]], 2: [[]], 4: [[]]}
                                 # 第二层列表存储各转向对应下游车道，第一层列表第二项存储下游交叉口
                                 connections = lane.getOutgoing()
                                 for connection in connections:
                                     direction1 = connection.getDirection().lower()
-                                    direction = 0 if direction1 == 's' else 1 if direction1 == 'l' else 2 if direction1 == \
+                                    direction = 1 if direction1 == 's' else 1 << 1 if direction1 == 'l' else 1 << 2 if direction1 == \
                                         'r' else direction1
                                     if direction == "t":
                                         continue
@@ -811,8 +812,8 @@ def SumoToMSG(file_name):
 
 
 if __name__ == '__main__':
-    msg_map_dict = SumoToMSG('tmp/CJDLtest1.net.xml')
+    msg_map_dict = SumoToMSG('../../data/network/anting.net.xml')
     # msg_map_dict = SumoToMSG('D:/Desktop/sumo项目/安研路安拓路-新/anting.net.xml')
     dict_json = json.dumps(msg_map_dict, indent=2)
-    with open('tmp/AT59-12-13.json', 'w+') as file:
+    with open('AT59-12-29.json', 'w+') as file:
         file.write(dict_json)

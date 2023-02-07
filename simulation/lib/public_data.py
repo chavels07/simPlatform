@@ -8,8 +8,6 @@ import re
 import time
 import weakref
 from datetime import datetime, timedelta
-from decimal import Decimal
-from functools import wraps
 from typing import Tuple, List, Dict, TypeVar, Callable, Any, Optional, Union
 
 from simulation.lib.common import alltypeassert
@@ -180,6 +178,7 @@ class SimStatus:
         用于在一次仿真步中多次提取的订阅数据，但不想重复调用traci接口或作为类成员变量存储，
         可使用该装饰器装饰一个get subscribe方法，例子参考signal_control.py/SignalController Class/get_subscribe_info Method
         """
+
         class _Cache:
             def __init__(self, _func):
                 self._func = _func
@@ -399,7 +398,7 @@ def create_PhasicExec(phasic_id: int,
     _PhasicExec = {
         'phasic_id': phasic_id,
         'order': order,
-        'conn_index_info': movements,
+        'movements': movements,
         'green': int(green),
         'yellow': int(yellow),
         'allred': int(allred)
@@ -419,11 +418,12 @@ def create_SignalExecution(node_id: dict,
         'node_id': node_id,
         'sequence': sequence,
         'control_mode': control_mode,
-        'cycle': cycle,
+        'cycle': int(cycle),
         'base_signal_scheme_id': base_signal_scheme_id,
         'start_time': int(start_time),
         'phases': phases
     }
+    return _SignalExecution
 
 
 # @alltypeassert
@@ -526,8 +526,8 @@ def create_SafetyMessage(ptcId: int,
             'lon': int(lon * 1e7)
         },
         'referPos': {
-            'positionX': int(x),
-            'positionY': int(y)
+            'positionX': int(x * 100),
+            'positionY': int(y * 100)
         },
         'nodeId': node,
         'laneId': lane_ref_id,
@@ -563,49 +563,187 @@ def create_SafetyMessage(ptcId: int,
     return _SafetyMessage
 
 
-def create_trajectory(ptcId: int,
-                      moy: int,
-                      secMark: float,
-                      lat: float,
-                      lon: float,
-                      node: str,
-                      lane_ref_id: int,
-                      speed: float,
-                      direction: float,
-                      acceleration: float,
-                      classification: str,
-                      edge_id: str,
-                      auto_level: int = 1,
-                      auto_status: int = 1):
+def create_BSM_Baidu(ptcId: int,
+                     moy: int,
+                     secMark: float,
+                     timestamp: float,
+                     lat: float,
+                     lon: float,
+                     x: float,
+                     y: float,
+                     node: dict,
+                     lane_ref_id: int,
+                     speed: float,
+                     direction: float,
+                     acceleration: float,
+                     width: float,
+                     length: float,
+                     classification: str,
+                     edge_id: str,
+                     lane_id: str):
     secMark = int(secMark * 1000)
     if secMark == 0:
         secMark += 1  # 避免为0时字段丢失的问题
-    trajectory = {
+
+    _SafetyMessage = {
         'ptcType': 1,
         'ptcId': ptcId,
         'source': 1,
         'device': [1],
         'moy': moy,
         'secMark': secMark,
+        'timestamp': timestamp,
         'timeConfidence': 'time000002',
         'pos': {
             'lat': int(lat * 1e7),
             'lon': int(lon * 1e7)
         },
+        'referPos': {
+            'positionX': int(x * 100),
+            'positionY': int(y * 100)
+        },
+        'nodeId': node,
         'laneId': lane_ref_id,
+        'accuracy': {
+            'pos': 'a2m'
+        },
+        'transmission': 'unavailable',
         'speed': int(speed / 0.02),
         'heading': int(direction / 0.0125),
+        'motionCfd': {
+            'speedCfd': 'prec1ms',
+            'headingCfd': 'prec0_01deg'
+        },
         'accelSet': {
-            "long": int(acceleration / 0.01)
+            'lon': int(acceleration / 0.01),  # 沿车辆前进方向
+            'lat': 0,
+            'vert': 0,
+            'yaw': 0
+        },
+        'size': {
+            'width': int(width * 100),
+            'length': int(length * 100)
         },
         'vehicleClass': {
             'classification': classification
         },
+        'section_ext_id': edge_id,
+        'lane_ext_id': lane_id
+    }
+    return _SafetyMessage
+
+
+@alltypeassert
+def create_RoadsideSafetyMessage(node_id: int,
+                                 lat: float,
+                                 lon: float,
+                                 participants: List[dict]):
+    _RoadsideSafetyMessage = {
+        'id': node_id,
+        'refPos': {
+            'lat': int(lat * 1e7),
+            'lon': int(lon * 1e7)
+        },
+        'participants': participants
+    }
+    return _RoadsideSafetyMessage
+
+
+def create_ParticipantData(ptc_id: int,
+                           moy: int,
+                           secMark: float,
+                           lat: float,
+                           lon: float,
+                           x: float,
+                           y: float,
+                           speed: float,
+                           heading: float,
+                           acceleration: float,
+                           width: float,
+                           length: float,
+                           classification: str,
+                           node: dict,
+                           edge_id: str,
+                           lane_id: str,
+                           general_id: List[int] = None):
+    secMark = int(secMark * 1000)
+    if secMark == 0:
+        secMark += 1  # 避免为0时字段丢失的问题
+    _ParticipantData = {
+        'ptcType': 1,
+        'ptcId': ptc_id,
+        'source': 1,
+        'secMark': secMark,
+        # 'timeConfidence': 'time000002',
+        'pos': {
+            'offsetLL_type': 'DF_PositionLLmD64b',
+            'offsetLL': {
+                'lat': int(lat * 1e7),
+                'lon': int(lon * 1e7)
+            }
+        },
+        'posConfidence': {
+            'pos': 'a2m'
+        },
+        'transmission': 'unavailable',
+        'speed': int(speed / 0.02),
+        'heading': int(heading / 0.0125),
+        'motionCfd': {
+            'speedCfd': 'prec1ms',
+            'headingCfd': 'prec0_01deg'
+        },
+        'accelSet': {
+            'lon': int(acceleration / 0.01),  # 沿车辆前进方向
+            'lat': 0,
+            'vert': 0,
+            'yaw': 0
+        },
+        'size': {
+            'width': int(width * 100),
+            'length': int(length * 100)
+        },
+        'vehicleClass': {
+            'classification': classification
+        },
+        'referPos': {
+            'positionX': int(x * 100),
+            'positionY': int(y * 100)
+        },
+        'device': [1],
+        'moy': moy,
+        'nodeId': node,
+        'section_ext_id': edge_id,
+        'lane_ext_id': lane_id
+    }
+    if general_id is not None:
+        _ParticipantData['id'] = general_id
+    return _ParticipantData
+
+
+# 用于提供轨迹数据给测评模块
+def create_trajectory(ptcId: int,
+                      lat: float,
+                      lon: float,
+                      node: str,
+                      speed: float,
+                      direction: float,
+                      acceleration: float,
+                      edge_id: str):
+    trajectory = {
+        'ptcType': "3",
+        'ptcId': str(ptcId),
+        'pos': {
+            'lat': int(lat * 1e7),
+            'lon': int(lon * 1e7)
+        },
+        'speed': int(speed / 0.02),
+        'heading': int(direction / 0.0125),
+        'accelSet': {
+            "lon": int(acceleration / 0.01),
+            "lat": 0
+        },
         'junction': node,
-        'link': edge_id,
-        'turning': 0,
-        'autoLevel': auto_level,
-        'autoStatus': auto_status
+        'link': edge_id
     }
     return trajectory
 

@@ -1,0 +1,72 @@
+{
+    "id": "49646",
+    "name": "point81",
+    "capacity": 8032,
+    "position": {
+      "lat": 312774209,
+      "lon": 1212164362
+    },
+    "link": [
+      {
+        "id": "genE477",
+        "isEntry": 1,
+        "length": 88.0,
+        "speed": 22.22
+      },
+      {
+        "id": "genE480",
+        "isEntry": 1,
+        "length": 143.48,
+        "speed": 27.78
+      },
+      {
+        "id": "genE483",
+        "isEntry": 1,
+        "length": 443.93,
+        "speed": 13.89
+      },
+      {
+        "id": "genE485",
+        "isEntry": 1,
+        "length": 139.87,
+        "speed": 27.78
+      },
+      {
+        "id": "genE476",
+        "isEntry": 0,
+        "length": 87.93,
+        "speed": 22.22
+      },
+      {
+        "id": "genE482",
+        "isEntry": 0,
+        "length": 437.74,
+        "speed": 13.89
+      },
+      {
+        "id": "genE484",
+        "isEntry": 0,
+        "length": 195.39,
+        "speed": 27.78
+      },
+      {
+        "id": "genE484",
+        "isEntry": 0,
+        "length": 195.39,
+        "speed": 27.78
+      },
+      {
+        "id": "genE484",
+        "isEntry": 0,
+        "length": 195.39,
+        "speed": 27.78
+      },
+      {
+        "id": "genE479",
+        "isEntry": 0,
+        "length": 100.9,
+        "speed": 27.78
+      }
+    ],
+    "control_strategy": 1
+  }

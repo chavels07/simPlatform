@@ -1,0 +1,78 @@
+{
+    "id": "49529",
+    "name": "point79",
+    "capacity": 7823,
+    "position": {
+      "lat": 312836215,
+      "lon": 1212072856
+    },
+    "link": [
+      {
+        "id": "genE462",
+        "isEntry": 1,
+        "length": 385.71,
+        "speed": 22.22
+      },
+      {
+        "id": "genE464",
+        "isEntry": 1,
+        "length": 72.31,
+        "speed": 27.78
+      },
+      {
+        "id": "genE466",
+        "isEntry": 1,
+        "length": 47.76,
+        "speed": 5.56
+      },
+      {
+        "id": "genE468",
+        "isEntry": 1,
+        "length": 85.15,
+        "speed": 27.78
+      },
+      {
+        "id": "genE467",
+        "isEntry": 0,
+        "length": 233.32,
+        "speed": 27.78
+      },
+      {
+        "id": "genE467",
+        "isEntry": 0,
+        "length": 233.32,
+        "speed": 27.78
+      },
+      {
+        "id": "genE465",
+        "isEntry": 0,
+        "length": 38.14,
+        "speed": 5.56
+      },
+      {
+        "id": "genE467",
+        "isEntry": 0,
+        "length": 233.32,
+        "speed": 27.78
+      },
+      {
+        "id": "genE461",
+        "isEntry": 0,
+        "length": 385.65,
+        "speed": 22.22
+      },
+      {
+        "id": "genE463",
+        "isEntry": 0,
+        "length": 605.48,
+        "speed": 27.78
+      },
+      {
+        "id": "genE463",
+        "isEntry": 0,
+        "length": 605.48,
+        "speed": 27.78
+      }
+    ],
+    "control_strategy": 1
+  }
