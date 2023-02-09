@@ -28,7 +28,8 @@
 		},
 		"junction_region": ["point79", "point80", "point81"],
 		"sim_time_step": 0.1,
-		"sim_time_limit": 300
+		"sim_time_limit": 300,
+		"warm_up_time": 30
 	},
 	"connection": {
 		"broker": "121.36.231.253",
