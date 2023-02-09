@@ -159,13 +159,13 @@ class SimInfoStorage:
 
     def initialize_subscribe_after_start(self):
         """调用start建立traci连接后为traffic_light添加订阅"""
-        # if self.signal_controllers is not None:
-        #     for sc in self.signal_controllers.values():
-        #         sc.subscribe_info()
+        if self.signal_controllers is not None:
+            for sc in self.signal_controllers.values():
+                sc.subscribe_info()
 
         if self.junction_veh_cons is not None:
             for jun_veh in self.junction_veh_cons.values():
-                jun_veh.subscribe_info(region_dis=45)
+                jun_veh.subscribe_info(region_dis=60)
 
     def create_signal_update_task(self, signal_scheme: dict) -> Optional[ImplementTask]:
         """
@@ -184,7 +184,11 @@ class SimInfoStorage:
         if node_id is None:
             return None
 
-        node_name = signalized_intersection_name_str(node_id)
+        # TODO: 固定node_id转换
+        if node_id == 33:
+            node_name = '31011410002'
+        else:
+            node_name = signalized_intersection_name_str(node_id)
         sc = self.signal_controllers.get(node_name)
         if sc is None:
             logger.info(f'cannot find intersection {node_name} in the network for signal scheme data')

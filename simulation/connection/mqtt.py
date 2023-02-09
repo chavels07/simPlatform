@@ -26,17 +26,17 @@ MSG_TYPE_INFO = {
     DataMsg.SpeedGuide: _MsgProperty('MECUpload/1/SpeedGuide', 0x34),
 
     # 自定义数据结构，通过json直接传递，None表示无需转换fb
-    OrderMsg.Start: _MsgProperty('MECUpload/1/Start', None),  # 仿真开始
+    OrderMsg.Start: _MsgProperty('send2SIM', None),  # 仿真开始 MECUpload/1/Start
     SpecialDataMsg.TransitionSS: _MsgProperty('MECUpload/1/TransitionSignalScheme', None),  # 过渡周期信控方案
     SpecialDataMsg.SERequirement: _MsgProperty('MECUpload/1/SignalExecutionRequirement', None),  # 请求发送当前执行的信控方案
 
     # 发布
-    DataMsg.SignalPhaseAndTiming: _MsgProperty('MECCloud/1/SPAT', 0x18),  # SPAT和BSM原来1均在末位，此处进行调整
+    DataMsg.SignalPhaseAndTiming: _MsgProperty('receive4SIM', 0x18),  # MECCloud/1/SPAT
     DataMsg.TrafficFlow: _MsgProperty('MECCloud/1/TrafficFlow', 0x25),
-    DataMsg.SafetyMessage: _MsgProperty('MECCloud/1/BSM', 0x17),
+    DataMsg.SafetyMessage: _MsgProperty('receive4SIM', 0x17),  # MECCloud/1/BSM
     DataMsg.RoadsideSafetyMessage: _MsgProperty('MECCloud/1/RSM', 0x1c),
     DataMsg.SignalExecution: _MsgProperty('MECCloud/1/SignalExecution', 0x30),
-    OrderMsg.ScoreReport: _MsgProperty('MECUpload/1/AlgoImageTest', None)  # 分数上报
+    OrderMsg.ScoreReport: _MsgProperty('MECCloud/1/BSM', None)  # 分数上报 MECUpload/1/AlgoImageTest
 }
 
 MsgInfo = Union[dict, str]  # 从通信获取的message类型为dict or str
@@ -86,7 +86,7 @@ class MessageTransfer:
 
     @classmethod
     def append(cls, msg_type: DetailMsgType, msg_payload: dict):
-        msg_queue = cls.msg_queue_collections.get(msg_type)
+        msg_queue = cls.msg_queue_collections.get(msg_type.__class__)
         if msg_queue is None:
             raise TypeError('unspecified message type')
         msg_queue.put_nowait((msg_type, msg_payload))

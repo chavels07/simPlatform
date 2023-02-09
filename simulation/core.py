@@ -92,6 +92,8 @@ class Simulation:
             sumoCmd.extend(['-a', detector_fp])
         if sim_time_len is not None:
             sumoCmd.extend(['--step-length', str(sim_time_len)])
+
+        sumoCmd.extend(['--lateral-resolution', str(1.2)])
         traci.start(sumoCmd)
 
         self.sim_core.sim_time_limit = sim_time_limit
@@ -132,11 +134,12 @@ class Simulation:
 
         logger.info('仿真开始')
         bsm_log = []
+        spat_log = []
         while traci.simulation.getMinExpectedNumber() >= 0:
 
             self.sim_core.run_single_step()
             self.storage.update_storage()  # 执行storage更新任务
-            # time.sleep(0.1)
+            time.sleep(0.05)
 
             # 处理接收到的数据类消息，转化成控制任务
             for msg_type, msg_info in connection.loading_msg(DataMsg):
@@ -147,13 +150,19 @@ class Simulation:
                 connection.publish(msg)
 
             bsms = self.storage.junction_veh_cons['31011410002'].get_vehicle_info()
+            spat = self.storage.signal_controllers['31011410002'].get_current_spat()
 
             if bsms:
                 bsm_log.append(bsms)
 
+            spat_log.append(spat)
+
             if self.sim_core.reach_limit():
                 with open(r'../data/tmp/display/bsm.json', 'w') as f:
                     json.dump(bsm_log, f, indent=2)
+
+                with open(r'../data/tmp/display/spat.json', 'w') as f:
+                    json.dump(spat_log, f, indent=2)
                 break  # 完成仿真任务提前终止仿真程序
 
         logger.info('仿真结束')
@@ -558,7 +567,6 @@ class AlgorithmEval:
         Returns:
 
         """
-        sim = self.sim
         # TODO: 挪到MQTT里
         # if not sim.is_connected():
         #     raise RuntimeError('与服务器处于未连接状态,请先创建连接')
@@ -569,7 +577,12 @@ class AlgorithmEval:
             for msg_type, msg_ in recv_msgs:
                 print(msg_)
                 if msg_type is OrderMsg.Start:
-                    self.testing_name = msg_['docker'].split(test_name_split)[-1]  # 获取分割后的最后一部分作为测试名称
+                    # self.testing_name = msg_['docker'].split(test_name_split)[-1]  # 获取分割后的最后一部分作为测试名称
+                    self.testing_name = 'real'
+                    node_id = msg_['node']
+                    start_time = msg_['timestamp']
+                    traffic_flow_data = msg_['traffic_flow']
+
                     self.__eval_start_func(connection)
 
                     self.eval_task_start(connection=connection)
@@ -730,6 +743,11 @@ def handle_score_report_event(*args, **kwargs) -> None:
     all_result['detail'] = detail
     connection = kwargs.get('connection')
     print(f'测试{config.SetupConfig.test_name!r}测评结果: {all_result}')
+
+    # 存储测试结果
+    with open(r'../data/tmp/display/output.json', 'w') as f:
+        json.dump(all_result, f, indent=2)
+
     connection.publish(PubMsgLabel(all_result, OrderMsg.ScoreReport, 'json'))
 
 

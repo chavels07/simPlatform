@@ -16,14 +16,3 @@ if __name__ == '__main__':
     algorithm_eval.initialize_storage()
     algorithm_eval.sim.auto_activate_publish()
     algorithm_eval.start(connection)
-
-    # algorithm_eval = AlgorithmEval(network_fp='../data/tmp/display/yutanglu1207.net.xml', signalized=False)
-
-
-    # algorithm_eval.loop_start()
-    #
-    #
-    # # simulation_core = SimCore()
-    # # simulation_core.initialize('')
-    # # simulation_core.connect('121.36.231.253', 1883)
-    # # simulation_core.run()

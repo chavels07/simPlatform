@@ -3,6 +3,7 @@
 # @File        : traffic.py
 # @Description : 交通流数据的存储，更新，读取
 
+import string
 from typing import Tuple, Callable, Set, Dict, List, Iterable
 from warnings import warn
 
@@ -193,8 +194,8 @@ class FlowStopLine:
 
     @staticmethod
     def enter_intersection(curr_status: VehInfo, last_status: VehInfo):
-        # 当前状态下edge_id为''表示进入交叉口内部，上一状态不为空表示在进口道，组合判断车辆通过停止线
-        if not curr_status.edge_id and last_status.edge_id:
+        # 由于展示交叉口edge命名规则有异于嘉定路网，以edge id规则区分是否进入交叉口
+        if curr_status.edge_id.startswith(':') and not set(curr_status.edge_id) & set(string.ascii_letters) and not last_status.edge_id.startswith(':'):
             return True
         else:
             return False
@@ -214,7 +215,7 @@ class FlowStopLine:
 
             tf_stats.append(tf_stat)
         stat_type = {'interval': int(record_duration_sec)}
-        node = create_NodeReferenceID(signalized_intersection_name_decimal(self.node_id))
+        node = create_NodeReferenceID(1)  # int(self.node_id)  TODO:给定的node id数字太大，无法发送，以1代替
 
         traffic_flow = create_TrafficFlow(node=node,
                                           gen_time=SimStatus.current_real_timestamp(),

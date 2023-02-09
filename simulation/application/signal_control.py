@@ -343,7 +343,7 @@ class SignalController:
                         zip(timings, lights)]
         phases = [create_Phase(phase_id=index, phase_states=[item]) for index, item in enumerate(phase_states, start=1)]
 
-        node_id = create_NodeReferenceID(signalized_intersection_name_decimal(self.ints_id))
+        node_id = create_NodeReferenceID(1)
         intersection_status_object = {'status': 5}  # fix timing
         moy = SimStatus.current_moy()
         timestamp = SimStatus.current_timestamp_in_minute()
