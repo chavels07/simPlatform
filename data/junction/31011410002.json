@@ -1,0 +1,60 @@
+{
+    "id": "49529",
+    "name": "31011410002",
+    "capacity": 7823,
+    "position": {
+      "lat": 312972317,
+      "lon": 1211867706
+    },
+    "link": [
+      {
+        "id": "-HK3TRJVTf7.294.0683777000",
+        "isEntry": 1,
+        "length": 20.04,
+        "speed": 13.89
+      },
+      {
+        "id": "0KUyAFxYUW.0.0000000000",
+        "isEntry": 1,
+        "length": 81.40,
+        "speed": 13.89
+      },
+      {
+        "id": "AyE3bDm3uL.0.0000000000",
+        "isEntry": 1,
+        "length": 20.50,
+        "speed": 13.89
+      },
+      {
+        "id": "-4xnhzLD_vP.143.8795332000",
+        "isEntry": 1,
+        "length": 62.30,
+        "speed": 13.89
+      },
+      {
+        "id": "HK3TRJVTf7.294.0683777000",
+        "isEntry": 0,
+        "length": 20.04,
+        "speed": 13.89
+      },
+      {
+        "id": "0KUyAFxYUW.0.0000000000",
+        "isEntry": 0,
+        "length": 81.40,
+        "speed": 13.89
+      },
+      {
+        "id": "AyE3bDm3uL.0.0000000000",
+        "isEntry": 0,
+        "length": 20.50,
+        "speed": 13.89
+      },
+      {
+        "id": "4xnhzLD_vP.143.8795332000",
+        "isEntry": 0,
+        "length": 62.30,
+        "speed": 13.89
+      }
+    ],
+    "control_strategy": 1
+  }

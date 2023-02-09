@@ -1,0 +1,15 @@
+<routes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/routes_file.xsd">
+	<vType accel="0.8" decel="4.5" id="Normal" laneChangeModel="SL2015" lcKeepRight="0" lcLookaheadLeft="5" lcOvertakeRight="0" lcMaxSpeedLatStanding="0" lcStrategic="10" length="5" maxSpeed="45" sigma="0.5" lcPushy="0.2" lcImpatience="0.5"/>
+    <flow id="flow1" from="AyE3bDm3uL.279.0062987000" to="-0KUyAFxYUW.75.5444242900" begin="0" end="10800" vehsPerHour="66" type="Normal" departLane="random" arrivalLane="current"/>
+    <flow id="flow2" from="AyE3bDm3uL.279.0062987000" to="HK3TRJVTf7.0.0000000000" begin="0" end="10800" vehsPerHour="578" type="Normal" departLane="random" arrivalLane="current"/>
+    <flow id="flow3" from="AyE3bDm3uL.279.0062987000" to="4xnhzLD_vP.143.8795332000" begin="0" end="10800" vehsPerHour="39" type="Normal" departLane="random" arrivalLane="current"/>
+    <flow id="flow4" from="-4xnhzLD_vP.0.0000000000" to="-AyE3bDm3uL.279.0062987000" begin="0" end="10800" vehsPerHour="66" type="Normal" departLane="random" arrivalLane="current"/>
+    <flow id="flow5" from="-4xnhzLD_vP.0.0000000000" to="-0KUyAFxYUW.75.5444242900" begin="0" end="10800" vehsPerHour="105" type="Normal" departLane="random" arrivalLane="current"/>
+    <flow id="flow6" from="-4xnhzLD_vP.0.0000000000" to="HK3TRJVTf7.0.0000000000" begin="0" end="10800" vehsPerHour="66" type="Normal" departLane="random" arrivalLane="current"/>
+    <flow id="flow7" from="-HK3TRJVTf7.0.0000000000" to="4xnhzLD_vP.0.0000000000" begin="0" end="10800" vehsPerHour="197" type="Normal" departLane="random" arrivalLane="current"/> 
+    <flow id="flow8" from="-HK3TRJVTf7.0.0000000000" to="-AyE3bDm3uL.279.0062987000" begin="0" end="10800" vehsPerHour="368" type="Normal" departLane="random" arrivalLane="current"/> 
+    <flow id="flow9" from="-HK3TRJVTf7.0.0000000000" to="-0KUyAFxYUW.75.5444242900" begin="0" end="10800" vehsPerHour="131" type="Normal" departLane="random" arrivalLane="current"/>
+    <flow id="flow10" from="0KUyAFxYUW.75.5444242900" to="HK3TRJVTf7.0.0000000000" begin="0" end="10800" vehsPerHour="53" type="Normal" departLane="random" arrivalLane="current"/>
+    <flow id="flow11" from="0KUyAFxYUW.75.5444242900" to="4xnhzLD_vP.0.0000000000" begin="0" end="10800" vehsPerHour="79" type="Normal" departLane="random" arrivalLane="current"/>
+    <flow id="flow12" from="0KUyAFxYUW.75.5444242900" to="-AyE3bDm3uL.279.0062987000" begin="0" end="10800" vehsPerHour="22" type="Normal" departLane="random" arrivalLane="current"/>
+</routes>
