@@ -249,10 +249,8 @@ class SimInfoStorage:
                 return None
             for junction_id, veh_container in self.junction_veh_cons.items():
                 trajectories = veh_container.get_trajectories()
-                if not trajectories:
-                    return None
 
-                # 记录数据
+                # 记录数据，无轨迹点返回空列表
                 self.trajectory_info.setdefault(junction_id, dict())[str(int(SimStatus.sim_time_stamp))] = trajectories
 
         return _wrapper

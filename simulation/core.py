@@ -66,7 +66,8 @@ class Simulation:
                         route_fp: str,
                         detector_fp: str,
                         sim_time_len: float,
-                        sim_time_limit: Optional[int] = None):
+                        sim_time_limit: Optional[int] = None,
+                        warm_up_time: int = 0):
         """
         初始化SUMO路网
         Args:
@@ -76,6 +77,7 @@ class Simulation:
             detector_fp: 检测器文件路径
             sim_time_len: 仿真单步时长
             sim_time_limit: 仿真时长限制
+            warm_up_time: 预热时间
 
         Returns:
 
@@ -96,6 +98,7 @@ class Simulation:
         traci.start(sumoCmd)
 
         self.sim_core.sim_time_limit = sim_time_limit
+        self.sim_core.warm_up_time = warm_up_time
 
         # 运行仿真后添加订阅消息
         self.storage.initialize_subscribe_after_start()
@@ -137,8 +140,11 @@ class Simulation:
         while traci.simulation.getMinExpectedNumber() >= 0:
 
             self.sim_core.run_single_step()
+
+            if self.sim_core.waiting_warm_up():
+                continue
+
             self.storage.update_storage()  # 执行storage更新任务
-            # time.sleep(0.05)
 
             # 处理接收到的数据类消息，转化成控制任务
             for msg_type, msg_info in connection.loading_msg(DataMsg):
@@ -200,9 +206,11 @@ class Simulation:
 
 class SimCoreSUMO:
     """SUMO仿真控制"""
+
     def __init__(self):
         self._net = None
         self._sim_time_limit = None
+        self._warm_up_time = 0
 
     def load_net(self, network_fp: str):
         self._net = sumolib.net.readNet(network_fp)  # 静态路网对象化数据
@@ -223,18 +231,35 @@ class SimCoreSUMO:
             raise ValueError('simulation time limit must be greater than 0')
         self._sim_time_limit = value
 
+    @property
+    def warm_up_time(self):
+        return self._warm_up_time
+
+    @warm_up_time.setter
+    def warm_up_time(self, value: int):
+        if isinstance(value, int) and (
+                value < 0 or self._sim_time_limit is not None and self.warm_up_time > self.sim_time_limit):
+            raise ValueError(f'invalid warm up time {value} s')
+        self._warm_up_time = value
+
     def run_single_step(self):
         traci.simulationStep(0)
         SimStatus.time_rolling(traci.simulation.getTime())
 
     def reach_limit(self):
-        if self.sim_time_limit is not None and traci.simulation.getTime() > self.sim_time_limit:
+        if self.sim_time_limit is not None and SimStatus.sim_time_stamp > self.sim_time_limit:
+            return True
+        return False
+
+    def waiting_warm_up(self):
+        if SimStatus.sim_time_stamp < self.warm_up_time:
             return True
         return False
 
 
 class TaskQueue:
     """任务池"""
+
     def __init__(self):
         self.cycle_task_queue: List[BaseTask] = []
         self.single_task_queue: List[BaseTask] = []
@@ -260,7 +285,7 @@ class TaskQueue:
         if len(self.cycle_task_queue):
             top_task = self.cycle_task_queue[0]
             while top_task.exec_time < SimStatus.sim_time_stamp:
-                top_task.exec_time += top_task.cycle_time
+                top_task.exec_time = round(top_task.cycle_time + top_task.exec_time, 3)  # 防止浮点数运算时精度损失
                 if top_task.exec_time > SimStatus.sim_time_stamp:
                     heapq.heappop(self.cycle_task_queue)
                     heapq.heappush(self.cycle_task_queue, top_task)
@@ -269,7 +294,7 @@ class TaskQueue:
                 success, msg_label = top_task.execute()
                 if msg_label is not None and success:
                     publish_msgs.append(msg_label)
-                top_task.exec_time = round(top_task.cycle_time + top_task.exec_time, 3)  # 防止浮点数运算时精度损失
+                top_task.exec_time = round(top_task.cycle_time + top_task.exec_time, 3)
 
                 heapq.heappop(self.cycle_task_queue)
                 heapq.heappush(self.cycle_task_queue, top_task)
@@ -462,6 +487,7 @@ class TaskQueue:
                 self.add_new_task(InfoTask(exec_func=flow_container.create_traffic_flow_pub_msg, cycle_time=pub_cycle,
                                            task_name=f'TF-{ints_id}'))
 
+
 @singleton
 class AlgorithmEval:
     def __init__(self):
@@ -482,7 +508,8 @@ class AlgorithmEval:
         self.sim.initialize_storage(config.SetupConfig.network_file_path,
                                     junction_list=config.SimulationConfig.junction_region,
                                     traffic_flow_feature=any(
-                                        msg.name == config.CONFIG_MSG_NAME['TF'] for msg in config.SimulationConfig.pub_msgs))
+                                        msg.name == config.CONFIG_MSG_NAME['TF'] for msg in
+                                        config.SimulationConfig.pub_msgs))
 
     def _initialize_simulation(self, route_fp: str):
         """初始化仿真内容"""
@@ -491,7 +518,8 @@ class AlgorithmEval:
                                  route_fp=route_fp,
                                  detector_fp=config.SetupConfig.detector_file_path,
                                  sim_time_len=config.SimulationConfig.sim_time_step,
-                                 sim_time_limit=config.SimulationConfig.sim_time_limit)
+                                 sim_time_limit=config.SimulationConfig.sim_time_limit,
+                                 warm_up_time=config.SimulationConfig.warm_up_time)
         # 注册任务生成函数
         self.sim.quick_register_task_creator_all()
 

@@ -45,6 +45,7 @@ class SimulationConfig:
     junction_region: Optional[List[str]] = None
     sim_time_step: float = 1
     sim_time_limit: Optional[float] = None
+    warm_up_time: int = 0
 
 
 class ConnectionConfig:
@@ -82,6 +83,7 @@ def load_config(cfg_path):
 
     SimulationConfig.sim_time_step = simulation_para['sim_time_step']
     SimulationConfig.sim_time_limit = simulation_para['sim_time_limit'] if simulation_para['sim_time_limit'] > 0 else None
+    SimulationConfig.warm_up_time = simulation_para['warm_up_time']
 
     # 通信连接参数
     conn_para = cfg.get('connection')

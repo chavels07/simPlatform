@@ -28,7 +28,8 @@
 		},
 		"junction_region": ["31011410002"],
 		"sim_time_step": 0.1,
-		"sim_time_limit": 400
+		"sim_time_limit": 330,
+		"warm_up_time": 30
 	},
 	"connection": {
 		"broker": "121.4.136.4",
