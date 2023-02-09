@@ -812,7 +812,7 @@ def SumoToMSG(file_name):
 
 
 if __name__ == '__main__':
-    msg_map_dict = SumoToMSG('../../data/network/anting.net.xml')  # ../../data/tmp/display/yutanglu1207.net.xml
+    msg_map_dict = SumoToMSG('../../data/tmp/display/yutanglu1207.net.xml')  # ../../data/network/anting.net.xml
     # msg_map_dict = SumoToMSG('D:/Desktop/sumo项目/安研路安拓路-新/anting.net.xml')
     dict_json = json.dumps(msg_map_dict, indent=2)
     with open('yutanglu.json', 'w+') as file:

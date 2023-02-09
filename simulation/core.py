@@ -93,7 +93,6 @@ class Simulation:
         if sim_time_len is not None:
             sumoCmd.extend(['--step-length', str(sim_time_len)])
 
-        sumoCmd.extend(['--lateral-resolution', str(1.2)])
         traci.start(sumoCmd)
 
         self.sim_core.sim_time_limit = sim_time_limit
@@ -139,7 +138,7 @@ class Simulation:
 
             self.sim_core.run_single_step()
             self.storage.update_storage()  # 执行storage更新任务
-            time.sleep(0.05)
+            # time.sleep(0.05)
 
             # 处理接收到的数据类消息，转化成控制任务
             for msg_type, msg_info in connection.loading_msg(DataMsg):
