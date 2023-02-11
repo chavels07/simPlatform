@@ -3,6 +3,7 @@
 # @File        : participants.py
 # @Description : 交通参与者信息提取
 
+import string
 from dataclasses import dataclass
 from typing import Tuple, List, Dict, Optional
 
@@ -314,18 +315,24 @@ class JunctionVehContainer:
             self.vehs_info.append(veh_info)
 
     def get_trajectories(self) -> Dict[str, dict]:
+        trajectories = {}
         """生成用于测评的车辆轨迹数据"""
-        trajectories = {
-            str(veh_info.ptcId): create_trajectory(ptcId=veh_info.ptcId,
-                                                   lat=veh_info.lat,
-                                                   lon=veh_info.lon,
-                                                   node=self.junction_id,
-                                                   speed=veh_info.speed,
-                                                   direction=veh_info.direction,
-                                                   acceleration=veh_info.acceleration,
-                                                   edge_id=veh_info.edge_id)
-            for veh_info in self.vehs_info
-        }
+        for veh_info in self.vehs_info:
+            edge_id = veh_info.edge_id
+
+            # 在交叉口内部,edge设为空
+            if edge_id.startswith(self.junction_id):
+                edge_id = ''
+            elif edge_id.endswith(string.digits) and edge_id[-2] == '_':
+                continue  # 除了交叉口外其他junction连接段不保存数据
+            trajectories[str(veh_info.ptcId)] = create_trajectory(ptcId=veh_info.ptcId,
+                                                                  lat=veh_info.lat,
+                                                                  lon=veh_info.lon,
+                                                                  node=self.junction_id,
+                                                                  speed=veh_info.speed,
+                                                                  direction=veh_info.direction,
+                                                                  acceleration=veh_info.acceleration,
+                                                                  edge_id=edge_id)
         return trajectories
 
     def get_vehicle_info(self) -> List[dict]:
