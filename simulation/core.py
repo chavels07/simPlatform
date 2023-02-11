@@ -140,6 +140,7 @@ class Simulation:
         while traci.simulation.getMinExpectedNumber() >= 0:
 
             self.sim_core.run_single_step()
+            # time.sleep(0.05)
 
             if self.sim_core.waiting_warm_up():
                 continue
@@ -766,7 +767,7 @@ def handle_score_report_event(*args, **kwargs) -> None:
             else:
                 all_result['score'] = all_result['score'] + single_result['score']
                 detail['detailInfo'].append(single_result)
-    all_result['score'] = float(all_result['score']) / float(eval_count)
+    all_result['score'] = round(float(all_result['score']) / float(eval_count), 2)
     all_result['detail'] = detail
     connection = kwargs.get('connection')
     print(f'测试{config.SetupConfig.test_name!r}测评结果: {all_result}')

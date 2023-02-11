@@ -15,9 +15,9 @@
         <step-length value="0.1"/>
     </time>
     
-    <!-- <processing>
+    <processing>
         <lateral-resolution value="1.2"/>
-    </processing> -->
+    </processing>
 
     <gui_only>
         <start value="true"/>

@@ -24,7 +24,7 @@ from simulation.lib.public_data import (create_Phasic, create_SignalScheme, crea
 class TLStatus(Enum):
     RED = 'r'
     YELLOW = 'y'
-    GREEN = 'g'
+    GREEN = 'G'
 
     def lower_name(self):
         return self.name.lower()

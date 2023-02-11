@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<!-- generated on 02/09/23 13:22:22 by Eclipse SUMO netedit Version 1.8.0
+<!-- generated on 02/10/23 00:56:58 by Eclipse SUMO netedit Version 1.8.0
 <configuration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/netconvertConfiguration.xsd">
 
     <input>
@@ -307,17 +307,16 @@
         </lane>
     </edge>
     <edge id=":HK3TRJVTf7.283.2184508630_0" function="internal">
-        <lane id=":HK3TRJVTf7.283.2184508630_0_0" index="0" disallow="pedestrian tram rail_urban rail rail_electric rail_fast ship" speed="7.64" length="8.32" width="3.20" shape="446.01,238.59,14.11 443.51,238.06,14.11 441.98,236.85,14.11 440.44,235.65,14.11 437.95,235.13,14.11"/>
-        <lane id=":HK3TRJVTf7.283.2184508630_0_1" index="1" disallow="pedestrian tram rail_urban rail rail_electric rail_fast ship" speed="13.89" length="8.32" width="3.20" shape="445.97,235.26,14.11 437.95,235.13,14.11"/>
-        <lane id=":HK3TRJVTf7.283.2184508630_0_2" index="2" disallow="pedestrian tram rail_urban rail rail_electric rail_fast ship" speed="13.89" length="8.32" width="3.27" shape="445.94,231.82,14.11 437.91,231.89,14.11"/>
-        <lane id=":HK3TRJVTf7.283.2184508630_0_3" index="3" disallow="pedestrian tram rail_urban rail rail_electric rail_fast ship" speed="13.89" length="8.32" width="3.43" shape="445.91,228.45,14.11 437.86,228.54,14.11">
-            <neigh lane=":HK3TRJVTf7.283.2184508630_4_2"/>
+        <lane id=":HK3TRJVTf7.283.2184508630_0_0" index="0" disallow="pedestrian tram rail_urban rail rail_electric rail_fast ship" speed="7.64" length="8.17" width="3.20" shape="446.01,238.59,14.11 443.51,238.06,14.11 441.98,236.85,14.11 440.44,235.65,14.11 437.95,235.13,14.11"/>
+        <lane id=":HK3TRJVTf7.283.2184508630_0_1" index="1" disallow="pedestrian tram rail_urban rail rail_electric rail_fast ship" speed="13.89" length="8.17" width="3.20" shape="445.97,235.26,14.11 437.95,235.13,14.11"/>
+        <lane id=":HK3TRJVTf7.283.2184508630_0_2" index="2" disallow="pedestrian tram rail_urban rail rail_electric rail_fast ship" speed="13.89" length="8.17" width="3.27" shape="445.94,231.82,14.11 437.91,231.89,14.11"/>
+        <lane id=":HK3TRJVTf7.283.2184508630_0_3" index="3" disallow="pedestrian tram rail_urban rail rail_electric rail_fast ship" speed="13.89" length="8.17" width="3.43" shape="445.91,228.45,14.11 437.86,228.54,14.11">
+            <neigh lane=":HK3TRJVTf7.283.2184508630_4_1"/>
         </lane>
     </edge>
     <edge id=":HK3TRJVTf7.283.2184508630_4" function="internal">
-        <lane id=":HK3TRJVTf7.283.2184508630_4_0" index="0" disallow="pedestrian tram rail_urban rail rail_electric rail_fast ship" speed="13.89" length="8.32" width="3.55" shape="437.78,221.49,14.11 445.84,220.97,14.11"/>
-        <lane id=":HK3TRJVTf7.283.2184508630_4_1" index="1" disallow="pedestrian tram rail_urban rail rail_electric rail_fast ship" speed="13.89" length="8.32" width="3.99" shape="437.78,221.49,14.11 440.27,221.98,14.11 441.82,223.11,14.11 443.38,224.24,14.11 445.87,224.74,14.11"/>
-        <lane id=":HK3TRJVTf7.283.2184508630_4_2" index="2" disallow="pedestrian tram rail_urban rail rail_electric rail_fast ship" speed="13.89" length="8.32" width="3.99" shape="437.82,224.98,14.11 445.87,224.74,14.11">
+        <lane id=":HK3TRJVTf7.283.2184508630_4_0" index="0" disallow="pedestrian tram rail_urban rail rail_electric rail_fast ship" speed="13.89" length="8.17" width="3.55" shape="437.78,221.49,14.11 445.84,220.97,14.11"/>
+        <lane id=":HK3TRJVTf7.283.2184508630_4_1" index="1" disallow="pedestrian tram rail_urban rail rail_electric rail_fast ship" speed="13.89" length="8.17" width="3.99" shape="437.82,224.98,14.11 445.87,224.74,14.11">
             <neigh lane=":HK3TRJVTf7.283.2184508630_0_3"/>
         </lane>
     </edge>
@@ -828,8 +827,8 @@
     <junction id="HK3TRJVTf7.139.1663131000" type="priority" x="585.88" y="226.21" z="14.10" incLanes="-HK3TRJVTf7.41.8325567600_0 -HK3TRJVTf7.41.8325567600_1 HK3TRJVTf7.139.1663131000_0 HK3TRJVTf7.139.1663131000_1" intLanes=":HK3TRJVTf7.139.1663131000_0_0 :HK3TRJVTf7.139.1663131000_0_1 :HK3TRJVTf7.139.1663131000_2_0 :HK3TRJVTf7.139.1663131000_2_1" shape="589.98,234.25,14.10 589.83,222.07,14.10 586.76,221.07,14.10 584.88,219.15,14.10 583.64,218.42,14.10 581.80,218.14,14.10 581.96,234.29,14.10">
         <request index="0" response="0000" foes="0000" cont="0"/>
         <request index="1" response="0000" foes="0000" cont="0"/>
-        <request index="2" response="0000" foes="1000" cont="0"/>
-        <request index="3" response="0100" foes="0100" cont="0"/>
+        <request index="2" response="1000" foes="1000" cont="0"/>
+        <request index="3" response="0000" foes="0100" cont="0"/>
     </junction>
     <junction id="HK3TRJVTf7.161.2301276455" type="priority" x="563.82" y="226.49" z="14.10" incLanes="-HK3TRJVTf7.139.1663131000_0 -HK3TRJVTf7.139.1663131000_1 HK3TRJVTf7.161.2301276455_0 HK3TRJVTf7.161.2301276455_1 HK3TRJVTf7.161.2301276455_2" intLanes=":HK3TRJVTf7.161.2301276455_0_0 :HK3TRJVTf7.161.2301276455_0_1 :HK3TRJVTf7.161.2301276455_2_0 :HK3TRJVTf7.161.2301276455_2_1 :HK3TRJVTf7.161.2301276455_2_2" shape="566.93,233.38,14.10 567.89,226.44,14.10 567.22,218.34,14.10 564.40,217.58,14.10 562.60,216.15,14.10 561.45,215.60,14.10 559.71,215.40,14.10 559.90,234.58,14.10">
         <request index="0" response="00000" foes="00000" cont="0"/>
@@ -860,14 +859,13 @@
         <request index="4" response="000000" foes="000000" cont="0"/>
         <request index="5" response="000000" foes="000000" cont="0"/>
     </junction>
-    <junction id="HK3TRJVTf7.283.2184508630" type="priority" x="441.84" y="226.78" z="14.11" incLanes="-HK3TRJVTf7.235.8897217000_0 -HK3TRJVTf7.235.8897217000_1 -HK3TRJVTf7.235.8897217000_2 -HK3TRJVTf7.235.8897217000_3 HK3TRJVTf7.283.2184508630_0 HK3TRJVTf7.283.2184508630_1" intLanes=":HK3TRJVTf7.283.2184508630_0_0 :HK3TRJVTf7.283.2184508630_0_1 :HK3TRJVTf7.283.2184508630_0_2 :HK3TRJVTf7.283.2184508630_0_3 :HK3TRJVTf7.283.2184508630_4_0 :HK3TRJVTf7.283.2184508630_4_1 :HK3TRJVTf7.283.2184508630_4_2" shape="446.02,240.14,14.11 445.74,219.20,14.11 437.75,219.85,14.11 437.97,236.73,14.11 441.03,237.60,14.11 442.96,239.26,14.11 444.21,239.89,14.11">
-        <request index="0" response="0000010" foes="0000010" cont="0"/>
-        <request index="1" response="0000000" foes="0000001" cont="0"/>
-        <request index="2" response="0000000" foes="0000000" cont="0"/>
-        <request index="3" response="0000000" foes="0000000" cont="0"/>
-        <request index="4" response="0000000" foes="0000000" cont="0"/>
-        <request index="5" response="1000000" foes="1000000" cont="0"/>
-        <request index="6" response="0000000" foes="0100000" cont="0"/>
+    <junction id="HK3TRJVTf7.283.2184508630" type="priority" x="441.84" y="226.78" z="14.11" incLanes="-HK3TRJVTf7.235.8897217000_0 -HK3TRJVTf7.235.8897217000_1 -HK3TRJVTf7.235.8897217000_2 -HK3TRJVTf7.235.8897217000_3 HK3TRJVTf7.283.2184508630_0 HK3TRJVTf7.283.2184508630_1" intLanes=":HK3TRJVTf7.283.2184508630_0_0 :HK3TRJVTf7.283.2184508630_0_1 :HK3TRJVTf7.283.2184508630_0_2 :HK3TRJVTf7.283.2184508630_0_3 :HK3TRJVTf7.283.2184508630_4_0 :HK3TRJVTf7.283.2184508630_4_1" shape="446.02,240.14,14.11 445.74,219.20,14.11 437.75,219.85,14.11 437.97,236.73,14.11 441.03,237.60,14.11 442.96,239.26,14.11 444.21,239.89,14.11">
+        <request index="0" response="000010" foes="000010" cont="0"/>
+        <request index="1" response="000000" foes="000001" cont="0"/>
+        <request index="2" response="000000" foes="000000" cont="0"/>
+        <request index="3" response="000000" foes="000000" cont="0"/>
+        <request index="4" response="000000" foes="000000" cont="0"/>
+        <request index="5" response="000000" foes="000000" cont="0"/>
     </junction>
     <junction id="HK3TRJVTf7.294.0683777000" type="priority" x="430.99" y="226.90" z="14.12" incLanes="-HK3TRJVTf7.283.2184508630_0 -HK3TRJVTf7.283.2184508630_1 -HK3TRJVTf7.283.2184508630_2 HK3TRJVTf7.294.0683777000_0 HK3TRJVTf7.294.0683777000_1" intLanes=":HK3TRJVTf7.294.0683777000_0_0 :HK3TRJVTf7.294.0683777000_0_1 :HK3TRJVTf7.294.0683777000_0_2 :HK3TRJVTf7.294.0683777000_3_0 :HK3TRJVTf7.294.0683777000_3_1" shape="432.59,236.79,14.12 432.42,219.91,14.12 429.41,219.90,14.12 429.60,236.83,14.12">
         <request index="0" response="00000" foes="00000" cont="0"/>
@@ -985,8 +983,8 @@
     <connection from="AyE3bDm3uL.279.0062987000" to="AyE3bDm3uL.253.9534973000" fromLane="0" toLane="0" via=":AyE3bDm3uL.279.0062987000_4_0" dir="s" state="M"/>
     <connection from="AyE3bDm3uL.279.0062987000" to="AyE3bDm3uL.253.9534973000" fromLane="1" toLane="1" via=":AyE3bDm3uL.279.0062987000_4_1" dir="s" state="M"/>
     <connection from="AyE3bDm3uL.279.0062987000" to="AyE3bDm3uL.253.9534973000" fromLane="2" toLane="2" via=":AyE3bDm3uL.279.0062987000_4_2" dir="s" state="M"/>
-    <connection from="HK3TRJVTf7.139.1663131000" to="HK3TRJVTf7.41.8325567600" fromLane="0" toLane="0" pass="1" via=":HK3TRJVTf7.139.1663131000_2_0" dir="s" state="M"/>
-    <connection from="HK3TRJVTf7.139.1663131000" to="HK3TRJVTf7.41.8325567600" fromLane="1" toLane="0" via=":HK3TRJVTf7.139.1663131000_2_1" dir="s" state="m"/>
+    <connection from="HK3TRJVTf7.139.1663131000" to="HK3TRJVTf7.41.8325567600" fromLane="0" toLane="0" via=":HK3TRJVTf7.139.1663131000_2_0" dir="s" state="m"/>
+    <connection from="HK3TRJVTf7.139.1663131000" to="HK3TRJVTf7.41.8325567600" fromLane="1" toLane="0" via=":HK3TRJVTf7.139.1663131000_2_1" dir="s" state="M"/>
     <connection from="HK3TRJVTf7.161.2301276455" to="HK3TRJVTf7.139.1663131000" fromLane="0" toLane="0" via=":HK3TRJVTf7.161.2301276455_2_0" dir="s" state="m"/>
     <connection from="HK3TRJVTf7.161.2301276455" to="HK3TRJVTf7.139.1663131000" fromLane="1" toLane="0" via=":HK3TRJVTf7.161.2301276455_2_1" dir="s" state="M"/>
     <connection from="HK3TRJVTf7.161.2301276455" to="HK3TRJVTf7.139.1663131000" fromLane="2" toLane="1" via=":HK3TRJVTf7.161.2301276455_2_2" dir="s" state="M"/>
@@ -998,8 +996,7 @@
     <connection from="HK3TRJVTf7.235.8897217000" to="HK3TRJVTf7.221.5010418000" fromLane="0" toLane="0" keepClear="0" via=":HK3TRJVTf7.235.8897217000_4_0" dir="s" state="M"/>
     <connection from="HK3TRJVTf7.235.8897217000" to="HK3TRJVTf7.221.5010418000" fromLane="1" toLane="1" keepClear="0" via=":HK3TRJVTf7.235.8897217000_4_1" dir="s" state="M"/>
     <connection from="HK3TRJVTf7.283.2184508630" to="HK3TRJVTf7.235.8897217000" fromLane="0" toLane="0" keepClear="0" via=":HK3TRJVTf7.283.2184508630_4_0" dir="s" state="M"/>
-    <connection from="HK3TRJVTf7.283.2184508630" to="HK3TRJVTf7.235.8897217000" fromLane="0" toLane="1" keepClear="0" via=":HK3TRJVTf7.283.2184508630_4_1" dir="s" state="m"/>
-    <connection from="HK3TRJVTf7.283.2184508630" to="HK3TRJVTf7.235.8897217000" fromLane="1" toLane="1" keepClear="0" via=":HK3TRJVTf7.283.2184508630_4_2" dir="s" state="M"/>
+    <connection from="HK3TRJVTf7.283.2184508630" to="HK3TRJVTf7.235.8897217000" fromLane="1" toLane="1" keepClear="0" via=":HK3TRJVTf7.283.2184508630_4_1" dir="s" state="M"/>
     <connection from="HK3TRJVTf7.294.0683777000" to="HK3TRJVTf7.283.2184508630" fromLane="0" toLane="0" keepClear="0" via=":HK3TRJVTf7.294.0683777000_3_0" dir="s" state="M"/>
     <connection from="HK3TRJVTf7.294.0683777000" to="HK3TRJVTf7.283.2184508630" fromLane="1" toLane="1" keepClear="0" via=":HK3TRJVTf7.294.0683777000_3_1" dir="s" state="M"/>
     <connection from="HK3TRJVTf7.41.8325567600" to="HK3TRJVTf7.0.0000000000" fromLane="0" toLane="0" via=":HK3TRJVTf7.41.8325567600_2_0" dir="s" state="M"/>
@@ -1102,7 +1099,6 @@
     <connection from=":HK3TRJVTf7.283.2184508630_0" to="-HK3TRJVTf7.283.2184508630" fromLane="3" toLane="2" dir="s" state="M"/>
     <connection from=":HK3TRJVTf7.283.2184508630_4" to="HK3TRJVTf7.235.8897217000" fromLane="0" toLane="0" dir="s" state="M"/>
     <connection from=":HK3TRJVTf7.283.2184508630_4" to="HK3TRJVTf7.235.8897217000" fromLane="1" toLane="1" dir="s" state="M"/>
-    <connection from=":HK3TRJVTf7.283.2184508630_4" to="HK3TRJVTf7.235.8897217000" fromLane="2" toLane="1" dir="s" state="M"/>
     <connection from=":HK3TRJVTf7.294.0683777000_0" to="-HK3TRJVTf7.294.0683777000" fromLane="0" toLane="0" dir="s" state="M"/>
     <connection from=":HK3TRJVTf7.294.0683777000_0" to="-HK3TRJVTf7.294.0683777000" fromLane="1" toLane="1" dir="s" state="M"/>
     <connection from=":HK3TRJVTf7.294.0683777000_0" to="-HK3TRJVTf7.294.0683777000" fromLane="2" toLane="2" dir="s" state="M"/>

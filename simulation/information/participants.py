@@ -333,23 +333,13 @@ class JunctionVehContainer:
 
         sm_msgs = [
             create_BSM_Baidu(ptcId=veh_info.ptcId,
-                             moy=SimStatus.current_moy(),
                              secMark=SimStatus.current_timestamp_in_minute(),
+                             moy=SimStatus.current_moy(),
                              timestamp=round(SimStatus.current_real_timestamp(), 1),
                              lat=veh_info.lat,
                              lon=veh_info.lon,
-                             x=veh_info.local_x,
-                             y=veh_info.local_y,
-                             node=create_NodeReferenceID(int(self.junction_id)),
-                             lane_ref_id=veh_info.lane_ref_id,
                              speed=veh_info.speed,
-                             direction=veh_info.direction,
-                             width=veh_info.width,
-                             length=veh_info.length,
-                             acceleration=veh_info.acceleration,
-                             classification=veh_info.classification,
-                             edge_id=veh_info.edge_id,
-                             lane_id=veh_info.lane_id)
+                             direction=veh_info.direction)
             for veh_info in self.vehs_info
         ]
 

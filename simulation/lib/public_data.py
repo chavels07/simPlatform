@@ -377,8 +377,6 @@ def create_SignalPhaseAndTiming(moy: int,
                                 name: str,
                                 intersections: List[dict]):
     timestamp = int(timestamp * 1000)
-    if timestamp == 0:
-        timestamp = 1  # 避免为0时出现字段丢失
     _SignalPhaseAndTiming = {
         'moy': moy,
         'timeStamp': timestamp,
@@ -564,71 +562,26 @@ def create_SafetyMessage(ptcId: int,
 
 
 def create_BSM_Baidu(ptcId: int,
-                     moy: int,
                      secMark: float,
+                     moy: int,
                      timestamp: float,
                      lat: float,
                      lon: float,
-                     x: float,
-                     y: float,
-                     node: dict,
-                     lane_ref_id: int,
                      speed: float,
-                     direction: float,
-                     acceleration: float,
-                     width: float,
-                     length: float,
-                     classification: str,
-                     edge_id: str,
-                     lane_id: str):
-    secMark = int(secMark * 1000)
-    if secMark == 0:
-        secMark += 1  # 避免为0时字段丢失的问题
+                     direction: float):
 
     _SafetyMessage = {
         'ptcType': 1,
         'ptcId': ptcId,
-        'source': 1,
-        'device': [1],
         'moy': moy,
-        'secMark': secMark,
+        'secMark': int(secMark * 1000),
         'timestamp': timestamp,
-        'timeConfidence': 'time000002',
         'pos': {
             'lat': int(lat * 1e7),
             'lon': int(lon * 1e7)
         },
-        'referPos': {
-            'positionX': int(x * 100),
-            'positionY': int(y * 100)
-        },
-        'nodeId': node,
-        'laneId': lane_ref_id,
-        'accuracy': {
-            'pos': 'a2m'
-        },
-        'transmission': 'unavailable',
         'speed': int(speed / 0.02),
         'heading': int(direction / 0.0125),
-        'motionCfd': {
-            'speedCfd': 'prec1ms',
-            'headingCfd': 'prec0_01deg'
-        },
-        'accelSet': {
-            'lon': int(acceleration / 0.01),  # 沿车辆前进方向
-            'lat': 0,
-            'vert': 0,
-            'yaw': 0
-        },
-        'size': {
-            'width': int(width * 100),
-            'length': int(length * 100)
-        },
-        'vehicleClass': {
-            'classification': classification
-        },
-        'section_ext_id': edge_id,
-        'lane_ext_id': lane_id
     }
     return _SafetyMessage
 
