@@ -22,6 +22,7 @@ from simulation.lib.public_conn_data import DataMsg, OrderMsg, SpecialDataMsg, D
 from simulation.lib.public_data import ImplementTask, InfoTask, BaseTask, SimStatus
 from simulation.lib.sim_data import SimInfoStorage, ArterialSimInfoStorage
 from simulation.connection.mqtt import MQTTConnection
+from simulation.utils.route_create import update_route_file_alternative
 
 # 校验环境变量中是否存在SUMO_HOME
 if 'SUMO_HOME' in os.environ:
@@ -67,7 +68,9 @@ class Simulation:
                         detector_fp: str,
                         sim_time_len: float,
                         sim_time_limit: Optional[int] = None,
-                        warm_up_time: int = 0):
+                        warm_up_time: int = 0,
+                        warm_up_waiting_node: OrderMsg[str] = None,
+                        warm_up_waiting_phase: Optional[int] = None):
         """
         初始化SUMO路网
         Args:
@@ -173,6 +176,10 @@ class Simulation:
 
         logger.info('仿真结束')
         SimStatus.reset()  # 仿真状态信息重置
+
+    def waiting_phase_active(self, node_id: str, phase_id: int):
+        changed, active_phase = self.storage.signal_controllers[node_id].get_phase_change_status()
+        return True if changed and phase_id in active_phase else False
 
     def _reset(self):
         """运行仿真结束后重置仿真状态"""
@@ -498,7 +505,7 @@ class AlgorithmEval:
         self.__eval_start_func: Optional[Callable] = None
 
         # 仿真运行开始方式
-        self.mode_setting(config.SetupConfig.route_file_path,
+        self.mode_setting('../data/network/real_flow.rou.xml',  # config.SetupConfig.route_file_path
                           config.SetupConfig.is_route_directory())
 
         # 注册仿真各环节触发的事件
@@ -607,9 +614,21 @@ class AlgorithmEval:
                 if msg_type is OrderMsg.Start:
                     # self.testing_name = msg_['docker'].split(test_name_split)[-1]  # 获取分割后的最后一部分作为测试名称
                     self.testing_name = 'real'
-                    node_id = msg_['node']
-                    start_time = msg_['timestamp']
-                    traffic_flow_data = msg_['traffic_flow']
+
+                    self.__eval_start_func(connection)
+
+                    self.eval_task_start(connection=connection)
+
+    def loop_start_from_traffic_flow(self, connection: MQTTConnection):
+        while True:
+            recv_msgs = connection.loading_msg(OrderMsg)
+
+            # 有数据时会才会进入循环
+            for msg_type, msg_ in recv_msgs:
+                print(msg_)
+                if msg_type is OrderMsg.TFStart:
+                    self.testing_name = 'real'
+                    update_route_file_alternative(msg_, '../data/network/flow.rou.xml')
 
                     self.__eval_start_func(connection)
 
@@ -618,7 +637,8 @@ class AlgorithmEval:
     def start(self, connection: MQTTConnection):
         """运行仿真测评"""
         if config.SetupConfig.await_start_cmd:
-            self.loop_start(connection)
+            # self.loop_start(connection)
+            self.loop_start_from_traffic_flow(connection)
         else:
             self.__eval_start_func(connection)
 
