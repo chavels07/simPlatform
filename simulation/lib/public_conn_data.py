@@ -14,6 +14,7 @@ class MsgType(Enum):
 class OrderMsg(MsgType):
     # 控制命令
     Start = auto()
+    TFStart = auto()
     ScoreReport = auto()
 
 

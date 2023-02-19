@@ -1,0 +1,96 @@
+{
+    "id": "49529",
+    "name": "31011410002",
+    "capacity": 7823,
+    "position": {
+      "lat": 312972317,
+      "lon": 1211867706
+    },
+    "link": [
+      {
+        "id": "-HK3TRJVTf7.294.0683777000",
+        "isEntry": 1,
+        "length": 20.04,
+        "speed": 13.89
+      },
+      {
+        "id": "-HK3TRJVTf7.283.2184508630",
+        "isEntry": 0,
+        "length": 5.35,
+        "speed": 13.89
+      },
+      {
+        "id": "-HK3TRJVTf7.235.8897217000",
+        "isEntry": 0,
+        "length": 8.54,
+        "speed": 13.89
+      },
+      {
+        "id": "0KUyAFxYUW.0.0000000000",
+        "isEntry": 1,
+        "length": 40.70,
+        "speed": 13.89
+      },
+      {
+        "id": "AyE3bDm3uL.0.0000000000",
+        "isEntry": 1,
+        "length": 20.50,
+        "speed": 13.89
+      },
+      {
+        "id": "AyE3bDm3uL.11.9898415400",
+        "isEntry": 0,
+        "length": 17.62,
+        "speed": 13.89
+      },
+      {
+        "id": "-4xnhzLD_vP.143.8795332000",
+        "isEntry": 1,
+        "length": 42.32,
+        "speed": 13.89
+      },
+      {
+        "id": "HK3TRJVTf7.294.0683777000",
+        "isEntry": 0,
+        "length": 20.04,
+        "speed": 13.89
+      },
+      {
+        "id": "HK3TRJVTf7.283.2184508630",
+        "isEntry": 0,
+        "length": 5.35,
+        "speed": 13.89
+      },
+      {
+        "id": "HK3TRJVTf7.235.8897217000",
+        "isEntry": 0,
+        "length": 8.54,
+        "speed": 13.89
+      },
+      {
+        "id": "-0KUyAFxYUW.0.0000000000",
+        "isEntry": 0,
+        "length": 40.70,
+        "speed": 13.89
+      },
+      {
+        "id": "-AyE3bDm3uL.0.0000000000",
+        "isEntry": 0,
+        "length": 20.50,
+        "speed": 13.89
+      },
+      {
+        "id": "-AyE3bDm3uL.11.9898415400",
+        "isEntry": 0,
+        "length": 17.62,
+        "speed": 13.89
+      },
+      {
+        "id": "4xnhzLD_vP.143.8795332000",
+        "isEntry": 0,
+        "length": 42.32,
+        "speed": 13.89
+      }
+    ],
+    "control_strategy": 1
+  }

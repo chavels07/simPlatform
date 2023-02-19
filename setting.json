@@ -6,7 +6,7 @@
 		"detector_file_path": "",
 		"test_name": "Test",
 		"arterial_mode": false,
-		"await_start_cmd": false
+		"await_start_cmd": true
 	},
 	"simulation": {
 		"pub_msg": {
