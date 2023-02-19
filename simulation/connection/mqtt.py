@@ -27,6 +27,7 @@ MSG_TYPE_INFO = {
 
     # 自定义数据结构，通过json直接传递，None表示无需转换fb
     OrderMsg.Start: _MsgProperty('MECUpload/1/Start', None),  # 仿真开始
+
     SpecialDataMsg.TransitionSS: _MsgProperty('MECUpload/1/TransitionSignalScheme', None),  # 过渡周期信控方案
     SpecialDataMsg.SERequirement: _MsgProperty('MECUpload/1/SignalExecutionRequirement', None),  # 请求发送当前执行的信控方案
 
@@ -43,8 +44,7 @@ MsgInfo = Union[dict, str]  # 从通信获取的message类型为dict or str
 
 
 class MQTTConnection:
-    """仿真直接调用通信类"""
-
+    """仿真直接调用通信类，包含接收订阅消息的线程，推送消息的客户端，消息缓存中转队列"""
     def __init__(self):
         self.state = False
         self.__msg_transfer = MessageTransfer()
@@ -65,7 +65,7 @@ class MQTTConnection:
 
     def connect(self, broker, port, topics):
         """
-
+        连接MQTT服务器
         Args:
             broker: 服务器ip
             port: 端口号
@@ -78,6 +78,7 @@ class MQTTConnection:
 
 
 class MessageTransfer:
+    """接收到的订阅消息缓存中转队列，按照消息类型存储到对应的队列"""
     msg_queue_collections = {
         DataMsg: Queue(maxsize=1024),
         SpecialDataMsg: Queue(maxsize=1024),
@@ -86,7 +87,16 @@ class MessageTransfer:
 
     @classmethod
     def append(cls, msg_type: DetailMsgType, msg_payload: dict):
-        msg_queue = cls.msg_queue_collections.get(msg_type)
+        """
+        向相应队列中插入消息
+        Args:
+            msg_type: 消息类型
+            msg_payload: 消息内容
+
+        Returns:
+
+        """
+        msg_queue = cls.msg_queue_collections.get(msg_type.__class__)
         if msg_queue is None:
             raise TypeError('unspecified message type')
         msg_queue.put_nowait((msg_type, msg_payload))
@@ -95,7 +105,11 @@ class MessageTransfer:
     def loading_msg(cls, msg_type: Type[DetailMsgType]) -> Iterator[Tuple[DetailMsgType, MsgInfo]]:
         """
         获取当前的所有消息，使用for循环读取
+        Args:
+            msg_type: 消息类型
+
         Returns: 生成器:(消息的类型, 内容对应的字典)，可能为空
+
         """
         _pop_queue = cls.msg_queue_collections.get(msg_type)
         if _pop_queue is None:
@@ -108,18 +122,21 @@ class MessageTransfer:
             yield _pop_queue.get_nowait()
 
 
+# 选取下发的topic进行订阅，通过topic名称筛选出需要订阅的topic
+VALID_TOPIC = {item.topic_name: (short_name, item.fb_code) for short_name, item in MSG_TYPE_INFO.items() if
+               item.topic_name.startswith('MECUpload') or item.topic_name.endswith('SIM')}
+
+
 def on_connect(client, userdata, flags, rc):
+    """MQTT连接服务器回调函数"""
     if rc == 0:
         logger.info("Connected to MQTT Broker!")
     else:
         logger.info("Failed to connect, return code %d\n", rc)
 
 
-VALID_TOPIC = {item.topic_name: (short_name, item.fb_code) for short_name, item in MSG_TYPE_INFO.items() if
-               item.topic_name.startswith('MECUpload')}  # 选取下发的topic进行订阅
-
-
 def on_message(client, user_data, msg: MQTTMessage):
+    """MQTT接收订阅消息回调函数"""
     short_topic, msg_type_code = VALID_TOPIC.get(msg.topic)
     if short_topic is not None:
         # msg_len = msg.payload.find(0x00)
@@ -141,6 +158,7 @@ def on_message(client, user_data, msg: MQTTMessage):
 
 
 def on_disconnect(client, userdata, rc):
+    """MQTT断开连接回调函数，尝试重连"""
     if rc != 0:
         print('Attempting to reconnect')
         try:
@@ -152,7 +170,7 @@ def on_disconnect(client, userdata, rc):
 
 class SubClientThread(threading.Thread):
     """
-    接收订阅线程
+    接收订阅消息的线程
     """
 
     def __init__(self, broker: str, port: int, topics: Union[str, Iterable[str], None]):
@@ -188,7 +206,7 @@ class SubClientThread(threading.Thread):
 
 class PubClient:
     """
-    发布消息, 使用实例:
+    发布消息的客服端, 推送的消息需要封装成PubMsgLabel的形式传入
     """
 
     def __init__(self, broker, port):
@@ -196,6 +214,7 @@ class PubClient:
 
     @staticmethod
     def __connect_pub_mqtt(broker, port):
+        """创建MQTT客户端"""
         client_id = f'pub-{random.randint(0, 1000)}'
         client = Client(client_id)
         client.on_connect = on_connect
@@ -203,11 +222,13 @@ class PubClient:
         return client
 
     def _publish(self, topic: str, msg: str):
+        """通过客户端发布单条消息"""
         msg_info = self.client.publish(topic, msg)
         if msg_info.rc != 0:
             logger.info(f'fail to send message to topic {topic}, return code: {msg_info.rc}')
 
     def publish(self, msg_label: PubMsgLabel):
+        """根据推送消息标记发布单条或多条消息"""
         target_topic, fb_code = MSG_TYPE_INFO.get(msg_label.msg_type)
         if msg_label.multiple:
             for single_msg in msg_label.raw_msg:
@@ -216,6 +237,18 @@ class PubClient:
             self.publish_single_msg(msg_label.raw_msg, msg_label.msg_type, msg_label.convert_method, fb_code, target_topic)
 
     def publish_single_msg(self, raw_msg, msg_type: DetailMsgType, convert_method: str, fb_code, target_topic: str):
+        """
+        根据消息标记完成数据转换或序列化任务，推送单条消息
+        Args:
+            raw_msg: 消息主体内容
+            msg_type: 消息类型
+            convert_method: 转换或序列化方法
+            fb_code: 序列化成Flatbuffers对应的消息类型编号，若无需序列化传入None
+            target_topic: 消息发布指定的topic
+
+        Returns:
+
+        """
         if convert_method == 'flatbuffers':
             if fb_code is None:
                 raise ValueError(f'no flatbuffers structure for msg type {msg_type}')
