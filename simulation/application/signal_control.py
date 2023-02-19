@@ -18,7 +18,8 @@ from simulation.lib.public_conn_data import PubMsgLabel, DataMsg
 from simulation.lib.public_data import (create_Phasic, create_SignalScheme, create_NodeReferenceID,
                                         create_DateTimeFilter, create_TimeCountingDown, create_PhaseState, create_Phase,
                                         create_DF_IntersectionState, create_SignalPhaseAndTiming, create_PhasicExec,
-                                        create_SignalExecution, signalized_intersection_name_decimal, ImplementTask, InfoTask, SimStatus)
+                                        create_SignalExecution, signalized_intersection_name_decimal, ImplementTask,
+                                        InfoTask, SimStatus)
 
 
 class TLStatus(Enum):
@@ -157,6 +158,7 @@ class SignalController:
     def __init__(self, ints_id: str):
         self.ints_id = ints_id
         self.tls_id, self.conn_info = self.__ints_tl_mapping_from_connection()  # traffic light id, 交叉口内部连接转向，进口道信息
+        self.get_phase_change_status = self._phase_change_status()
 
     @classmethod
     def load_net(cls, net: sumolib.net.Net):
@@ -253,7 +255,6 @@ class SignalController:
         cycle_length = 0
         phases = []
         for index, (timing, mov) in enumerate(zip(gather_phases, movements), start=1):
-
             phasic_exec = create_PhasicExec(phasic_id=index,
                                             order=index,
                                             movements=self.conn_info.get_connections_movements_str(mov),
@@ -273,10 +274,11 @@ class SignalController:
                                                   phases=phases)
         return signal_execution
 
-    def get_phases_time_countdown(self) -> Tuple[List[dict], List[int]]:
+    def get_phases_time_countdown(self) -> Tuple[List[dict], List[int], List[List[int]]]:
         """
         获取交叉口所有相位的时间倒计时
         Returns: 1) 各相位time countdown 结构数据 2) 各相位信号灯状态对应的枚举值，参考数据结构中的LightState
+                 3) 各相位对应的流向信息
 
         """
         subscribe_info = self.get_subscribe_info()
@@ -286,7 +288,7 @@ class SignalController:
         next_switch_time = subscribe_info[tc.TL_NEXT_SWITCH]  # absolute simulation time
         cycle_length = sum(phase.duration for phase in local_phases)
 
-        timing, lights = [], []
+        timing, lights, related_movements = [], [], []
         yellow_insert_index = None  # 灯色为黄灯单独修改灯色
         for phase_index, phase in enumerate(local_phases):
             status = get_phase_status(phase.state)
@@ -332,16 +334,24 @@ class SignalController:
                                                   time_confidence=0,
                                                   next_start_time=next_start_time,
                                                   next_duration=next_duration))
+
+            connection_indexes = [index for index, state in enumerate(phase.state) if state not in ['r', 'R']]
+            related_movements.append(list({self.conn_info.movement_of_connection[conn] for conn in connection_indexes}))
+
         if yellow_insert_index is not None:
             lights[yellow_insert_index] = 7  # intersectionClearance(yellow)
-        return timing, lights
+        return timing, lights, related_movements
 
     def get_current_spat(self) -> dict:
         """获取当前交叉口的SPAT消息"""
-        timings, lights = self.get_phases_time_countdown()
+        timings, lights, related_movements = self.get_phases_time_countdown()
         phase_states = [create_PhaseState(light=light, timing=time_countdown) for time_countdown, light in
                         zip(timings, lights)]
-        phases = [create_Phase(phase_id=index, phase_states=[item]) for index, item in enumerate(phase_states, start=1)]
+
+        phases = []
+        for state, movements in zip(phase_states, related_movements):
+            for mov_idx in movements:
+                phases.append(create_Phase(phase_id=mov_idx, phase_states=[state]))
 
         node_id = create_NodeReferenceID(1)
         intersection_status_object = {'status': 5}  # fix timing
@@ -512,3 +522,25 @@ class SignalController:
     def _inner_set_program_logic(tls_id, updated_logic):
         traci.trafficlight.setProgramLogic(tls_id, updated_logic)
         return True, None
+
+    def _phase_change_status(self):
+        last_connection_indexes = []
+
+        def _wrapper():
+            curr_logic = self.get_current_logic()
+            local_phases: List[traci.trafficlight.Phase] = curr_logic.getPhases()
+            # status = None
+            for phase_index, phase in enumerate(local_phases):
+                status = get_phase_status(phase.state)
+                if status is not TLStatus.RED:
+                    connection_indexes = [index for index, state in enumerate(phase.state) if state not in ['r', 'R']]
+                    break
+            else:
+                raise RuntimeError('all phases are red light')
+
+            nonlocal last_connection_indexes
+            phase_change_flag = True if connection_indexes != last_connection_indexes and len(
+                last_connection_indexes) else False
+            last_connection_indexes = connection_indexes
+            return phase_change_flag, connection_indexes
+        return _wrapper
