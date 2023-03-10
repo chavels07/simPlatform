@@ -69,7 +69,7 @@ class Simulation:
                         sim_time_len: float,
                         sim_time_limit: Optional[int] = None,
                         warm_up_time: int = 0,
-                        warm_up_waiting_node: OrderMsg[str] = None,
+                        warm_up_waiting_node: Optional[str] = None,
                         warm_up_waiting_phase: Optional[int] = None):
         """
         初始化SUMO路网
@@ -505,7 +505,7 @@ class AlgorithmEval:
         self.__eval_start_func: Optional[Callable] = None
 
         # 仿真运行开始方式
-        self.mode_setting('../data/network/real_flow.rou.xml',  # config.SetupConfig.route_file_path
+        self.mode_setting(config.SetupConfig.route_file_path,  # '../data/network/real_flow.rou.xml'
                           config.SetupConfig.is_route_directory())
 
         # 注册仿真各环节触发的事件

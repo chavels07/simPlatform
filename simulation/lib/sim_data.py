@@ -255,7 +255,7 @@ class SimInfoStorage:
 
         return _wrapper
 
-    def traffic_flow_update_task(self, interval: float = 1.) -> Callable[[], None]:
+    def traffic_flow_update_task(self, interval: float = 0.5) -> Callable[[], None]:
 
         def _wrapper():
             if SimStatus.sim_time_stamp % interval:
