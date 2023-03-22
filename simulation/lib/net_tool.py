@@ -56,6 +56,12 @@ class Turn(Enum):
     PARTIALLY_LEFT = 'L'
     PARTIALLY_RIGHT = 'R'
 
+    def ignore_upper(self):
+        value = self.value
+        if value.isupper():
+            value = value.lower()
+        return self.__class__(value)
+
 
 class Entry:
     def __init__(self):
@@ -111,7 +117,7 @@ class JunctionConns:
 
     def add_connection(self, direction: Direction, turn: Turn, conn_idx: int):
         self.entries[direction][turn].append(conn_idx)
-        self.movement_of_connection[conn_idx] = self.INVERSE_MOVEMENT_MAPPING[(direction, turn)]
+        self.movement_of_connection[conn_idx] = self.INVERSE_MOVEMENT_MAPPING[(direction, turn.ignore_upper())]
 
     def get_connections_movements_str(self, connection_indexes: List[int]) -> List[str]:
         movement_set = {str(self.movement_of_connection[index]) for index in connection_indexes}
