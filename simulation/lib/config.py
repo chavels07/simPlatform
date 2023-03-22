@@ -65,7 +65,8 @@ def load_config(cfg_path):
     SetupConfig.config_file_path = '/'.join((top_level_dir, setup_para['config_file_path']))
     SetupConfig.network_file_path = '/'.join((top_level_dir, setup_para['network_file_path']))
     SetupConfig.route_file_path = '/'.join((top_level_dir, setup_para['route_file_path']))
-    SetupConfig.detector_file_path = '/'.join((top_level_dir, setup_para['detector_file_path']))
+    if setup_para['detector_file_path']:
+        SetupConfig.detector_file_path = '/'.join((top_level_dir, setup_para['detector_file_path']))
     SetupConfig.test_name = setup_para.get('test_name', 'No test name')
     SetupConfig.arterial_mode = setup_para.get('arterial_mode', True)
     SetupConfig.await_start_cmd = setup_para.get('await_start_cmd', False)
