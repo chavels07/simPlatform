@@ -1,9 +1,9 @@
 {
 	"preliminary": {
-		"config_file_path": "data/network/anting.sumocfg",
-		"network_file_path": "data/network/anting.net.xml",
-		"route_file_path": "data/network/route/arterial",
-		"detector_file_path": "data/network/detector.xml",
+		"config_file_path": "data/tmp/xinpeng/CAGL.sumocfg",
+		"network_file_path": "data/tmp/xinpeng/CAGL230223basic01.net.xml",
+		"route_file_path": "data/tmp/xinpeng/CAGLflow.rou.xml",
+		"detector_file_path": "",
 		"test_name": "Test",
 		"arterial_mode": false,
 		"await_start_cmd": false
@@ -26,7 +26,7 @@
 				"frequency": -1
 			}
 		},
-		"junction_region": ["point79", "point80", "point81"],
+		"junction_region": ["point76", "point78", "point79", "point80"],
 		"sim_time_step": 0.1,
 		"sim_time_limit": 300,
 		"warm_up_time": 30

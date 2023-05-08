@@ -8,7 +8,8 @@ from simulation.core import Simulation, AlgorithmEval
 from simulation.lib.config import load_config, SetupConfig, ConnectionConfig
 
 if __name__ == '__main__':
-    load_config('../setting.json')
+    # load_config_json('../setting-xp.json')
+    load_config('../setting.yaml')
     connection = MQTTConnection()
     connection.connect(ConnectionConfig.broker, ConnectionConfig.port, None)
 

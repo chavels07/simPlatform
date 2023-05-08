@@ -137,7 +137,7 @@ class Simulation:
         while traci.simulation.getMinExpectedNumber() >= 0:
 
             self.sim_core.run_single_step()
-            time.sleep(0.1)
+            # time.sleep(0.1)
 
             if self.sim_core.waiting_warm_up():
                 continue

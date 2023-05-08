@@ -54,7 +54,7 @@ class ConnectionConfig:
     port: int = -1
 
 
-def load_config(cfg_path):
+def load_config_json(cfg_path):
     with open(cfg_path, 'r') as f:
         cfg = json.load(f)
 
@@ -92,6 +92,43 @@ def load_config(cfg_path):
         ConnectionConfig.port = conn_para['port']
 
 
+import yaml
 
+
+def load_config(cfg_path):
+    with open(cfg_path, 'r') as f:
+        cfg = yaml.safe_load(f)
+    # 仿真启动前预先设置的参数
+    top_level_dir = os.path.abspath('..')  # 获取项目绝对路径
+    top_level_dir = top_level_dir.replace('\\', '/')
+    setup_para = cfg['preliminary']
+    SetupConfig.config_file_path = '/'.join((top_level_dir, setup_para['configFilePath']))
+    SetupConfig.network_file_path = '/'.join((top_level_dir, setup_para['networkFilePath']))
+    SetupConfig.route_file_path = '/'.join((top_level_dir, setup_para['routeFilePath']))
+    if setup_para['detectorFilePath']:
+        SetupConfig.detector_file_path = '/'.join((top_level_dir, setup_para['detectorFilePath']))
+    SetupConfig.test_name = setup_para.get('testName', 'No test name')
+    SetupConfig.arterial_mode = setup_para.get('arterialMode', True)
+    SetupConfig.await_start_cmd = setup_para.get('awaitStartCmd', False)
+
+    # 仿真运行时设置参数
+    simulation_para = cfg['simulation']
+    for pub_msg in simulation_para['pubMsg']:
+        if pub_msg['frequency'] > 0:
+            SimulationConfig.pub_msgs.append(_MsgCfg(pub_msg['name'], pub_msg['frequency']))
+
+    junction_scenarios = simulation_para['junctionRegion']  # 长度为0时表示场景覆盖路网所有交叉口
+    if len(junction_scenarios):
+        SimulationConfig.junction_region = junction_scenarios
+
+    SimulationConfig.sim_time_step = simulation_para['simTimeStep']
+    SimulationConfig.sim_time_limit = simulation_para['simTimeLimit'] if simulation_para['simTimeLimit'] > 0 else None
+    SimulationConfig.warm_up_time = simulation_para['warmUpTime']
+
+    # 通信连接参数
+    conn_para = cfg.get('connection')
+    if conn_para is not None:
+        ConnectionConfig.broker = conn_para['broker']
+        ConnectionConfig.port = conn_para['port']
 
 

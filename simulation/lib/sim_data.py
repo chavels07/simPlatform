@@ -164,7 +164,7 @@ class SimInfoStorage:
 
         if self.junction_veh_cons is not None:
             for jun_veh in self.junction_veh_cons.values():
-                jun_veh.subscribe_info(region_dis=45)
+                jun_veh.subscribe_info(region_dis=150)
 
     def create_signal_update_task(self, signal_scheme: dict) -> Optional[ImplementTask]:
         """
