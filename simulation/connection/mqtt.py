@@ -102,7 +102,7 @@ class MessageTransfer:
         msg_queue.put_nowait((msg_type, msg_payload))
 
     @classmethod
-    def loading_msg(cls, msg_type: Type[DetailMsgType]) -> Iterator[Tuple[DetailMsgType, MsgInfo]]:
+    def loading_msg(cls, msg_type: Type[DetailMsgType]):
         """
         获取当前的所有消息，使用for循环读取
         Args:

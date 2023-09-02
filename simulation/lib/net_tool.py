@@ -82,20 +82,38 @@ class Entry:
 
 
 class JunctionConns:
+    # MOVEMENT_MAPPING = {
+    #     1: (Direction.SOUTH, Turn.LEFT),
+    #     2: (Direction.SOUTH, Turn.STRAIGHT),
+    #     3: (Direction.SOUTH, Turn.RIGHT),
+    #     4: (Direction.EAST, Turn.LEFT),
+    #     5: (Direction.EAST, Turn.STRAIGHT),
+    #     6: (Direction.EAST, Turn.RIGHT),
+    #     7: (Direction.NORTH, Turn.LEFT),
+    #     8: (Direction.NORTH, Turn.STRAIGHT),
+    #     9: (Direction.NORTH, Turn.RIGHT),
+    #     10: (Direction.WEST, Turn.LEFT),
+    #     11: (Direction.WEST, Turn.STRAIGHT),
+    #     12: (Direction.WEST, Turn.RIGHT),
+    #     20: (Direction.SOUTH, Turn.TURN),
+    #     21: (Direction.EAST, Turn.TURN),
+    #     22: (Direction.NORTH, Turn.TURN),
+    #     23: (Direction.WEST, Turn.TURN)
+    # }
     MOVEMENT_MAPPING = {
-        1: (Direction.SOUTH, Turn.LEFT),
-        2: (Direction.SOUTH, Turn.STRAIGHT),
-        3: (Direction.SOUTH, Turn.RIGHT),
-        4: (Direction.EAST, Turn.LEFT),
-        5: (Direction.EAST, Turn.STRAIGHT),
-        6: (Direction.EAST, Turn.RIGHT),
-        7: (Direction.NORTH, Turn.LEFT),
-        8: (Direction.NORTH, Turn.STRAIGHT),
-        9: (Direction.NORTH, Turn.RIGHT),
-        10: (Direction.WEST, Turn.LEFT),
-        11: (Direction.WEST, Turn.STRAIGHT),
-        12: (Direction.WEST, Turn.RIGHT),
-        20: (Direction.SOUTH, Turn.TURN),  # TODO:掉头临时定义，需要确定
+        1: (Direction.NORTH, Turn.LEFT),
+        2: (Direction.NORTH, Turn.STRAIGHT),
+        3: (Direction.NORTH, Turn.RIGHT),
+        5: (Direction.EAST, Turn.LEFT),
+        6: (Direction.EAST, Turn.STRAIGHT),
+        7: (Direction.EAST, Turn.RIGHT),
+        9: (Direction.SOUTH, Turn.LEFT),
+        10: (Direction.SOUTH, Turn.STRAIGHT),
+        11: (Direction.SOUTH, Turn.RIGHT),
+        13: (Direction.WEST, Turn.LEFT),
+        14: (Direction.WEST, Turn.STRAIGHT),
+        15: (Direction.WEST, Turn.RIGHT),
+        20: (Direction.SOUTH, Turn.TURN),
         21: (Direction.EAST, Turn.TURN),
         22: (Direction.NORTH, Turn.TURN),
         23: (Direction.WEST, Turn.TURN)
@@ -138,6 +156,10 @@ class JunctionConns:
             return None
 
         return connections
+
+    def valid_sumo_MAP_movement_ext_id(self) -> List[str]:
+        mov_collections = {str(mov) for mov in self.movement_of_connection.values()}
+        return list(mov_collections)
 
 
 def get_vector_angle_degree(x: float, y: float):

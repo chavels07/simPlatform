@@ -18,7 +18,8 @@ from simulation.lib.public_conn_data import PubMsgLabel, DataMsg
 from simulation.lib.public_data import (create_Phasic, create_SignalScheme, create_NodeReferenceID,
                                         create_DateTimeFilter, create_TimeCountingDown, create_PhaseState, create_Phase,
                                         create_DF_IntersectionState, create_SignalPhaseAndTiming, create_PhasicExec,
-                                        create_SignalExecution, signalized_intersection_name_decimal, ImplementTask, InfoTask, SimStatus)
+                                        create_SignalExecution, signalized_intersection_name_decimal, ImplementTask,
+                                        InfoTask, SimStatus, PhasicValidator)
 
 
 class TLStatus(Enum):
@@ -156,7 +157,7 @@ class SignalController:
 
     def __init__(self, ints_id: str):
         self.ints_id = ints_id
-        self.tls_id, self.conn_info = self.__ints_tl_mapping_from_connection()  # traffic light id, 交叉口内部连接转向，进口道信息
+        self._ints_tl_mapping_from_connection()  # traffic light id, 交叉口内部连接转向，进口道信息
 
     @classmethod
     def load_net(cls, net: sumolib.net.Net):
@@ -168,7 +169,7 @@ class SignalController:
         traci.trafficlight.subscribe(self.tls_id, (tc.TL_CURRENT_PROGRAM, tc.TL_CURRENT_PHASE,
                                                    tc.TL_NEXT_SWITCH, tc.TL_COMPLETE_DEFINITION_RYG))
 
-    def __ints_tl_mapping_from_connection(self) -> Tuple[str, JunctionConns]:
+    def _ints_tl_mapping_from_connection(self):
         """
         从connection建立交叉口id和信号灯id的映射，能应对id不直接相当的情况
         Returns: 交叉口信号控制id，connection的信息
@@ -180,8 +181,8 @@ class SignalController:
         connections: List[sumolib.net.Connection] = node.getConnections()
         assert len(connections)
         any_connection = connections[0]
-        tls_id = any_connection.getTLSID()
-        mov_conn_mapping = entry_movement_sorted(connections, node)
+        self.tls_id = any_connection.getTLSID()
+        self.conn_info = entry_movement_sorted(connections, node)
 
         # 按照link index排序，此后可以按照edge变化来判断movement
         # connections = sorted(connections, key=lambda x: x.getTLLinkIndex())
@@ -194,7 +195,6 @@ class SignalController:
         #     from_edge = conn.getFrom()
         #     turn = Turn(conn.getDirection())
         #     conn_index_info[link_index] = ConnInfo(turn=turn, from_edge=from_edge)
-        return tls_id, mov_conn_mapping
 
     # @SimStatus.cache_property  # 似乎使用速度会慢一些
     def get_subscribe_info(self) -> Dict[int, Any]:
@@ -429,81 +429,108 @@ class SignalController:
 
         updated_phases_list = []
         phases.sort(key=lambda x: x['order'] if 'order' in x else 0)  # 按order排序，若无order则不变排序
-        has_movements = all('movements' in phase for phase in phases)  # 判断是否存在movements字段，否则在当前相位相序和流向基础上更新参数
-        if not has_movements:
-            current_logic = self.get_current_logic()
-            phase_len = len(phases)
-            phase_light_spilt_len = len(current_logic.getPhases())  # SUMO内划分了灯色的相位
-            if phase_light_spilt_len % phase_len != 0:
-                logger.info('phase count does not match current traffic light,  cannot create control')
-                return None  # SUMO中相位数无法被signalscheme相位数整除，则不能实现分配
-            light_count_per_phase = phase_light_spilt_len // phase_len
-            light_display_order = ['green', 'yellow', 'allred']
 
-            for phase_index, phase in enumerate(phases):
-                green = phase.get('green')
-                yellow = phase.get('yellow')
-                if green is None or yellow is None:
-                    logger.info('green or yellow argument missed, cannot create control')
-                    return None
+        # Note: 允许空的Movement
+        # has_movements = all('movements' in phase for phase in phases)  # 判断是否存在movements字段，否则在当前相位相序和流向基础上更新参数
+        # if not has_movements:
+        #     current_logic = self.get_current_logic()
+        #     phase_len = len(phases)
+        #     phase_light_spilt_len = len(current_logic.getPhases())  # SUMO内划分了灯色的相位
+        #     if phase_light_spilt_len % phase_len != 0:
+        #         logger.info('phase count does not match current traffic light,  cannot create control')
+        #         return None  # SUMO中相位数无法被signalscheme相位数整除，则不能实现分配
+        #     light_count_per_phase = phase_light_spilt_len // phase_len
+        #     light_display_order = ['green', 'yellow', 'allred']
+        #
+        #     for phase_index, phase in enumerate(phases):
+        #         green = phase.get('green')
+        #         yellow = phase.get('yellow')
+        #         if green is None or yellow is None:
+        #             logger.info('green or yellow argument missed, cannot create control')
+        #             return None
+        #
+        #         # movements字段为空时，直接使用当前connection控制组合
+        #         for light_index in range(light_count_per_phase):
+        #             phase_light_spilt_index = phase_index * light_count_per_phase + light_index
+        #             duration = getattr(phase, light_display_order[light_index], 0)  # 按灯色依次读取时间
+        #             this_phase = current_logic.getPhases()[phase_light_spilt_index]
+        #             this_phase.duration = duration
+        #     updated_logic = current_logic
+        # else:
+        #     for phase in phases:
+        #         movements = phase.get('movements')
+        #         green = phase.get('green')
+        #         yellow = phase.get('yellow')
+        #         if green is None or yellow is None:
+        #             logger.info('green or yellow argument missed, cannot create control')
+        #             return None
+        #
+        #         connection_indexes = []
+        #         for movement in movements:
+        #             if not movement.isnumeric():
+        #                 logger.info(f'movement {movement} is not defined in intersection {self.ints_id}')
+        #             conn_res = self.conn_info.get_movement_connections(int(movement))
+        #             if conn_res is None:
+        #                 logger.warn(f'Movement {movement} not in junction {self.ints_id}')
+        #                 continue
+        #             connection_indexes.extend(conn_res)
+        #         print(connection_indexes)
+        #
+        #         # connection和TLS的编号规则有差异，前者是从1开始后者从0开始
+        #         green_state = ''.join(
+        #             TLStatus.GREEN.value if index in connection_indexes else TLStatus.RED.value for index in
+        #             range(len(self.conn_info)))
+        #         yellow_state = ''.join(
+        #             TLStatus.YELLOW.value if index in connection_indexes else TLStatus.RED.value for index in
+        #             range(len(self.conn_info)))
+        #         updated_phases_list.append(traci.trafficlight.Phase(green, green_state))
+        #         updated_phases_list.append(traci.trafficlight.Phase(yellow, yellow_state))
+        #         all_red = phase.get('allred')
+        #         if all_red:
+        #             all_red_state = 'r' * len(self.conn_info)
+        #             updated_phases_list.append(traci.trafficlight.Phase(all_red, all_red_state))
+        #
+        #     new_program_id = int(self.get_subscribe_info()[tc.TL_CURRENT_PROGRAM]) + 1
+        #     updated_logic = traci.trafficlight.Logic(str(new_program_id), 0, 0, phases=updated_phases_list)
 
-                # movements字段为空时，直接使用当前connection控制组合
-                for light_index in range(light_count_per_phase):
-                    phase_light_spilt_index = phase_index * light_count_per_phase + light_index
-                    duration = getattr(phase, light_display_order[light_index], 0)  # 按灯色依次读取时间
-                    this_phase = current_logic.getPhases()[phase_light_spilt_index]
-                    this_phase.duration = duration
-            updated_logic = current_logic
-        else:
-            for phase in phases:
-                movements = phase.get('movements')
-                green = phase.get('green')
-                yellow = phase.get('yellow')
-                if green is None or yellow is None:
-                    logger.info('green or yellow argument missed, cannot create control')
-                    return None
+        # 不允许空的Movement, 使用Pydantic做校验
+        for phase in phases:
+            PhasicValidator.model_validate(phase, context={'valid_movements': self.conn_info.valid_sumo_MAP_movement_ext_id()})
+            movements = phase.get('movements')
+            green = phase.get('green')
+            yellow = phase.get('yellow')
+            if green is None or yellow is None:
+                logger.info('green or yellow argument missed, cannot create control')
+                return None
 
-                connection_indexes = []
-                for movement in movements:
-                    if not movement.isnumeric():
-                        logger.info(f'movement {movement} is not defined in intersection {self.ints_id}')
-                    conn_res = self.conn_info.get_movement_connections(int(movement))
-                    if conn_res is None:
-                        logger.warn(f'Movement {movement} not in junction {self.ints_id}')
-                        continue
-                    connection_indexes.extend(conn_res)
-                print(connection_indexes)
-                ####
-                # movement_indexes = []
-                # for movement in movements:
-                #     if not movement.isnumeric() or int(movement) not in self.conn_index_info:
-                #         logger.info(f'movement {movement} is not defined in intersection {self.ints_id}')
-                #
-                #     movement_indexes.append(int(movement))
-                # TODO: MAP中movement index是1开头，需要寻求movement_index与link_index的映射
-                # green_state = ''.join(
-                #     TLStatus.GREEN.value if index in movement_indexes else TLStatus.RED.value for index in
-                #     range(1, len(self.conn_index_info) + 1))
-                # yellow_state = ''.join(
-                #     TLStatus.YELLOW.value if index in movement_indexes else TLStatus.RED.value for index in
-                #     range(1, len(self.conn_index_info) + 1))
+            connection_indexes = []
+            for movement in movements:
+                if not movement.isnumeric():
+                    logger.info(f'movement {movement} is not defined in intersection {self.ints_id}')
+                conn_res = self.conn_info.get_movement_connections(int(movement))
+                if conn_res is None:
+                    logger.warn(f'Movement {movement} not in junction {self.ints_id}')
+                    continue
+                connection_indexes.extend(conn_res)
+            print(connection_indexes)
 
-                # connection和TLS的编号规则有差异，前者是从1开始后者从0开始
-                green_state = ''.join(
-                    TLStatus.GREEN.value if index in connection_indexes else TLStatus.RED.value for index in
-                    range(len(self.conn_info)))
-                yellow_state = ''.join(
-                    TLStatus.YELLOW.value if index in connection_indexes else TLStatus.RED.value for index in
-                    range(len(self.conn_info)))
-                updated_phases_list.append(traci.trafficlight.Phase(green, green_state))
-                updated_phases_list.append(traci.trafficlight.Phase(yellow, yellow_state))
-                all_red = phase.get('allred')
-                if all_red:
-                    all_red_state = 'r' * len(self.conn_info)
-                    updated_phases_list.append(traci.trafficlight.Phase(all_red, all_red_state))
+            # connection和TLS的编号规则有差异，前者是从1开始后者从0开始
+            green_state = ''.join(
+                TLStatus.GREEN.value if index in connection_indexes else TLStatus.RED.value for index in
+                range(len(self.conn_info)))
+            yellow_state = ''.join(
+                TLStatus.YELLOW.value if index in connection_indexes else TLStatus.RED.value for index in
+                range(len(self.conn_info)))
+            updated_phases_list.append(traci.trafficlight.Phase(green, green_state))
+            updated_phases_list.append(traci.trafficlight.Phase(yellow, yellow_state))
+            all_red = phase.get('allred')
+            if all_red:
+                all_red_state = 'r' * len(self.conn_info)
+                updated_phases_list.append(traci.trafficlight.Phase(all_red, all_red_state))
 
-            new_program_id = int(self.get_subscribe_info()[tc.TL_CURRENT_PROGRAM]) + 1
-            updated_logic = traci.trafficlight.Logic(str(new_program_id), 0, 0, phases=updated_phases_list)
+        new_program_id = int(self.get_subscribe_info()[tc.TL_CURRENT_PROGRAM]) + 1
+        updated_logic = traci.trafficlight.Logic(str(new_program_id), 0, 0, phases=updated_phases_list)
+
         exec_time = self.get_next_cycle_start() + SimStatus.sim_time_stamp
         logger.info(f'signal update task of junction {self.ints_id} created')
         return ImplementTask(self._inner_set_program_logic, args=(self.tls_id, updated_logic), exec_time=exec_time)

@@ -166,11 +166,14 @@ class SimInfoStorage:
             for jun_veh in self.junction_veh_cons.values():
                 jun_veh.subscribe_info(region_dis=150)
 
-    def create_signal_update_task(self, signal_scheme: dict) -> Optional[ImplementTask]:
+    def create_signal_update_task(self,
+                                  signal_scheme: dict,
+                                  callback: Callable[[], None] = None) -> Optional[ImplementTask]:
         """
         根据SignalScheme消息创建信号更新任务
         Args:
             signal_scheme: 信号方案消息
+            callback: 任务调用的回调函数
 
         Returns:
             信号更新的可执行任务
@@ -190,13 +193,19 @@ class SimInfoStorage:
             return None
 
         sc_control_task = sc.create_control_task(signal_scheme)
+
+        if callback is not None:
+            callback()
         return sc_control_task
 
-    def create_speed_guide_task(self, MSG_SpeedGuide: dict) -> Optional[List[ImplementTask]]:
+    def create_speed_guide_task(self,
+                                MSG_SpeedGuide: dict,
+                                callback: Callable[[], None] = None) -> Optional[List[ImplementTask]]:
         """
         根据传入时刻创建车速引导任务：首先获取车速引导信息，创建车速引导任务，删除多余储存
         Args:
             MSG_SpeedGuide:当前时刻传入的多条车速引导指令。指令内容详见https://code.zbmec.com/mec_core/mecdata/-/wikis/8-典型应用场景/1-车速引导
+            callback: 任务调用的回调函数
         Returns:
             车速引导指令。[{veh_id: guide}]
         """
@@ -232,6 +241,8 @@ class SimInfoStorage:
                 _task.append(ImplementTask(_traci_set_speed_wrapper, args=(veh_id, guide)))
 
             self.vehicle_controller.update_speedguide_info()  # 删除多余存储
+            if callback is not None:
+                callback()
 
             return _task
 

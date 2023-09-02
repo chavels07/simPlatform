@@ -17,7 +17,7 @@ from itertools import chain
 from typing import List, Dict, Optional, Callable, Union, Iterable
 
 import simulation.lib.config as config
-from simulation.lib.common import logger, singleton
+from simulation.lib.common import logger, singleton, ImplementCounter
 from simulation.lib.public_conn_data import DataMsg, OrderMsg, SpecialDataMsg, DetailMsgType, PubMsgLabel
 from simulation.lib.public_data import ImplementTask, InfoTask, BaseTask, SimStatus
 from simulation.lib.sim_data import SimInfoStorage, ArterialSimInfoStorage
@@ -137,7 +137,7 @@ class Simulation:
         while traci.simulation.getMinExpectedNumber() >= 0:
 
             self.sim_core.run_single_step()
-            # time.sleep(0.1)
+            # time.sleep(0.03)
 
             if self.sim_core.waiting_warm_up():
                 continue
@@ -165,8 +165,14 @@ class Simulation:
 
     def quick_register_task_creator_all(self):
         """快速注册从接收的数据转换成任务的处理方法"""
-        self.task_queue.register_task_creator(DataMsg.SignalScheme, self.storage.create_signal_update_task)
-        self.task_queue.register_task_creator(DataMsg.SpeedGuide, self.storage.create_speed_guide_task)
+        self.task_queue.register_task_creator(
+            DataMsg.SignalScheme,
+            partial(self.storage.create_signal_update_task, callback=implement_counter.implement_reaction)
+        )
+        self.task_queue.register_task_creator(
+            DataMsg.SpeedGuide,
+            partial(self.storage.create_speed_guide_task, callback=implement_counter.implement_reaction)
+        )
         # self.task_create_func[DataMsg.SignalScheme] = self.storage.create_signal_update_task
         # self.task_create_func[DataMsg.SpeedGuide] = self.storage.create_speed_guide_task
         # self.task_create_func[SpecialDataMsg.TransitionSS] = ...  # TODO: 过渡方案，要求获取signal_scheme的task
@@ -242,6 +248,9 @@ class SimCoreSUMO:
         return False
 
 
+implement_counter = ImplementCounter()
+
+
 class TaskQueue:
     """任务池"""
 
@@ -249,7 +258,7 @@ class TaskQueue:
         self.cycle_task_queue: List[BaseTask] = []
         self.single_task_queue: List[BaseTask] = []
         self._task_create_func: Dict[DetailMsgType,
-                                     Callable[[Union[dict, str]], Optional[Union[BaseTask, Iterable[BaseTask]]]]] = {}
+        Callable[[Union[dict, str]], Optional[Union[BaseTask, Iterable[BaseTask]]]]] = {}
 
     def add_new_task(self, new_task: BaseTask):
         """添加新任务"""
@@ -510,14 +519,14 @@ class AlgorithmEval:
 
     def sim_task_start(self, connection: MQTTConnection):
         """开始运行仿真任务"""
+        emit_eval_event(EvalEventType.BEFORE_TASK)
         self.sim.run(connection=connection)
         emit_eval_event(EvalEventType.FINISH_TASK, sim_core=self.sim, eval_record=self.eval_record,
-                        trajectories=self.sim.storage.trajectory_info)
+                        trajectories=self.sim.storage.trajectory_info, docker_name=self.testing_name)
 
         traci.close()
 
-        # using for test
-        self.eval_task_start(connection=connection)
+        self.eval_task_start(connection=connection, docker_name=self.testing_name)
 
     def eval_task_start(*args, **kwargs):
         emit_eval_event(EvalEventType.START_EVAL, *args, **kwargs)
@@ -580,7 +589,6 @@ class AlgorithmEval:
 
         """
         sim = self.sim
-        # TODO: 挪到MQTT里
         # if not sim.is_connected():
         #     raise RuntimeError('与服务器处于未连接状态,请先创建连接')
         while True:
@@ -593,7 +601,7 @@ class AlgorithmEval:
                     self.testing_name = msg_['docker'].split(test_name_split)[-1]  # 获取分割后的最后一部分作为测试名称
                     self.__eval_start_func(connection)
 
-                    self.eval_task_start(connection=connection)
+                    self.eval_task_start(connection=connection, docker_name=self.testing_name)
 
     def start(self, connection: MQTTConnection):
         """运行仿真测评"""
@@ -609,6 +617,7 @@ class AlgorithmEval:
 class EvalEventType(Enum):
     START_EVAL = auto()
     ERROR = auto()
+    BEFORE_TASK = auto()
     FINISH_TASK = auto()
     FINISH_EVAL = auto()
 
@@ -618,7 +627,7 @@ class EventArgumentError(AttributeError):
     pass
 
 
-eval_event_subscribers = defaultdict(list)  # 事件订阅
+eval_event_subscribers: Dict[EvalEventType, list] = defaultdict(list)  # 事件订阅
 
 
 def subscribe_eval_event(event: EvalEventType, function: Callable) -> None:
@@ -638,6 +647,10 @@ def emit_eval_event(event: EvalEventType, *args, **kwargs):
     """触发某类事件发生时对应的后续所有操作"""
     for func in eval_event_subscribers[event]:
         func(*args, **kwargs)
+
+
+def handle_data_reload_event(*args, **kwargs) -> None:
+    implement_counter.reset()  # 重置执行计数器计数
 
 
 def handle_trajectory_record_event(*args, **kwargs) -> None:
@@ -669,8 +682,8 @@ def handle_multiple_trajectory_record_event(*args, **kwargs) -> None:
 
     for junction_id, veh_info in trajectories.items():
         # handle_trajectory_record_event(traj_record_dir=save_dir, veh_info=veh_info)
-        handle_trajectory_record_event(traj_record_dir=save_dir, docker_name="test",
-                                       sub_name='_'.join(('test', junction_id)), veh_info=veh_info)
+        handle_trajectory_record_event(traj_record_dir=save_dir, sub_name='_'.join(('test', junction_id)),
+                                       veh_info=veh_info, **kwargs)
 
     logger.info(f'轨迹记录已保存在{save_dir}')
 
@@ -735,19 +748,23 @@ def handle_score_report_event(*args, **kwargs) -> None:
     # docker_name = kwargs.get('docker_name')
     all_result = {'score': 0, 'name': docker_name, 'abnormal': 0}
     detail = {'errorTimes': 0, 'detailInfo': []}
-    eval_count = 0
-    for file in os.listdir(os.path.join(eval_record_dir, docker_name)):
-        eval_count += 1
-        with open(os.path.join(eval_record_dir, docker_name, file), 'r') as f:
-            single_result: dict = json.load(f)
-            if single_result['score'] == -1:  # evaluation error
-                all_result['abnormal'] = 1
-                detail['errorTimes'] = detail['errorTimes'] + 1
-                detail['detailInfo'].append(single_result['detail'])
-            else:
-                all_result['score'] = all_result['score'] + single_result['score']
-                detail['detailInfo'].append(single_result)
-    all_result['score'] = float(all_result['score']) / float(eval_count)
+    if implement_counter.valid_implement:
+        eval_count = 0
+        for file in os.listdir(os.path.join(eval_record_dir, docker_name)):
+            eval_count += 1
+            with open(os.path.join(eval_record_dir, docker_name, file), 'r') as f:
+                single_result: dict = json.load(f)
+                if single_result['score'] == -1:  # evaluation error
+                    all_result['abnormal'] = 1
+                    detail['errorTimes'] = detail['errorTimes'] + 1
+                    detail['detailInfo'].append(single_result['detail'])
+                else:
+                    all_result['score'] = all_result['score'] + single_result['score']
+                    detail['detailInfo'].append(single_result)
+        all_result['score'] = float(all_result['score']) / float(eval_count)
+    else:
+        detail['errorTimes'] = 1
+        detail['detailInfo'] = 'No valid execution received from Algorithm'
     all_result['detail'] = detail
     connection = kwargs.get('connection')
     print(f'测试{config.SetupConfig.test_name!r}测评结果: {all_result}')
@@ -756,7 +773,10 @@ def handle_score_report_event(*args, **kwargs) -> None:
 
 def initialize_score_prepare():
     """注册评分相关的事件"""
+    subscribe_eval_event(EvalEventType.BEFORE_TASK, handle_data_reload_event)
     # subscribe_eval_event(EvalEventType.FINISH_TASK, handle_trajectory_record_event)
     subscribe_eval_event(EvalEventType.FINISH_TASK, handle_multiple_trajectory_record_event)
     subscribe_eval_event(EvalEventType.START_EVAL, handle_eval_apply_event)
     subscribe_eval_event(EvalEventType.FINISH_EVAL, handle_score_report_event)
+
+# TODO: 1) Pydantic catch error 2) delete file in output

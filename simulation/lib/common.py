@@ -111,19 +111,16 @@ def timer(func):
     return wrapper
 
 
-# class Cache:
-#
-#     def __init__(self, func):
-#         self.func = func
-#         self._func_name = '_' + func.__name__
-#
-#
-#     def __call__(self, *args, **kwargs):
-#         return self.func(*args, **kwargs)
-#
-#     def __get__(self, instance, owner):
-#         if instance is None:
-#             return self
-#
-#         if
-#         setattr(instance, self._func_name, )
+class ImplementCounter:
+    def __init__(self):
+        self.counter = 0
+
+    @property
+    def valid_implement(self) -> bool:
+        return self.counter > 0
+
+    def implement_reaction(self):
+        self.counter += 1
+
+    def reset(self):
+        self.counter = 0

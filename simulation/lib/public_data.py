@@ -3,12 +3,13 @@
 # @File        : public_data.py
 # @Description : 存放不仅用于仿真内部，也可用在其他环节所需的数据结构
 
-import math
 import re
 import time
 import weakref
 from datetime import datetime, timedelta
-from typing import Tuple, List, Dict, TypeVar, Callable, Any, Optional, Union
+from typing import Tuple, List, Dict, Callable, Any, Optional, Union
+
+from pydantic import BaseModel, field_validator, Field, PositiveInt, FieldValidationInfo
 
 from simulation.lib.common import alltypeassert
 from simulation.lib.public_conn_data import PubMsgLabel
@@ -711,6 +712,28 @@ def create_TrafficFlow(node: dict,
         'stats': stats
     }
     return _TrafficFlow
+
+
+"""外部输入数据验证"""
+
+
+class PhasicValidator(BaseModel):
+    order: PositiveInt
+    green: PositiveInt
+    yellow: PositiveInt
+    movements: List[str] = Field(min_length=1)
+
+    @field_validator('movements')
+    @classmethod
+    def movements_validator(cls, value: List[str], info: FieldValidationInfo):
+        # if not len(value):
+        #     raise ValueError('SignalScheme movements字段不能为空列表')
+
+        context = info.context
+        valid_movements = context['valid_movements']
+        if any(mov not in valid_movements for mov in value):
+            raise ValueError(f'SignalScheme 包含不正确的movement, 合法相位:{valid_movements}')
+        return value
 
 
 """常用方法"""
