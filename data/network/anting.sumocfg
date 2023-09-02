@@ -14,9 +14,7 @@
         <end value="3600"/>
         <step-length value="0.1"/>
     </time>
-    <processing>
-        <lateral-resolution value="1.2"/>
-    </processing>
+
 
     <gui_only>
         <start value="true"/>
