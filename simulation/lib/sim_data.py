@@ -194,7 +194,7 @@ class SimInfoStorage:
 
         sc_control_task = sc.create_control_task(signal_scheme)
 
-        if callback is not None:
+        if sc_control_task is not None and callback is not None:
             callback()
         return sc_control_task
 

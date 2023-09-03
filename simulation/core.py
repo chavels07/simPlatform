@@ -307,7 +307,7 @@ class TaskQueue:
             top_task = self.single_task_queue[0]
             if top_task.exec_time is None or top_task.exec_time == SimStatus.sim_time_stamp:
                 if isinstance(top_task, ImplementTask):
-                    success, res = top_task.execute()  # TODO: 如果控制函数执行后需要在main中修改状态，需要通过返回值传递
+                    success, res = top_task.execute()
                 elif isinstance(top_task, InfoTask):
                     success, msg_label = top_task.execute()  # 返回结果: 执行是否成功, 需要发送的消息Optional[PubMsgLabel]
                     if msg_label is not None and success:
@@ -596,7 +596,6 @@ class AlgorithmEval:
 
             # 有数据时会才会进入循环
             for msg_type, msg_ in recv_msgs:
-                print(msg_)
                 if msg_type is OrderMsg.Start:
                     self.testing_name = msg_['docker'].split(test_name_split)[-1]  # 获取分割后的最后一部分作为测试名称
                     self.__eval_start_func(connection)
@@ -664,7 +663,7 @@ def handle_trajectory_record_event(*args, **kwargs) -> None:
 
     """
 
-    traj_record_dir = kwargs.get('traj_record_dir', '../data/trajectory')  # 目录赞写死
+    traj_record_dir = kwargs.get('traj_record_dir', '../data/trajectory')  # 目录暂写死
     docker_name = kwargs.get('docker_name', 'test')
     docker_record_dir = os.path.join(traj_record_dir, docker_name)
     if not os.path.exists(docker_record_dir):
@@ -678,11 +677,12 @@ def handle_trajectory_record_event(*args, **kwargs) -> None:
 
 def handle_multiple_trajectory_record_event(*args, **kwargs) -> None:
     trajectories = kwargs.get('trajectories')
+    docker_name = kwargs.get('docker_name', 'test')
     save_dir = '../data/trajectory'
 
     for junction_id, veh_info in trajectories.items():
         # handle_trajectory_record_event(traj_record_dir=save_dir, veh_info=veh_info)
-        handle_trajectory_record_event(traj_record_dir=save_dir, sub_name='_'.join(('test', junction_id)),
+        handle_trajectory_record_event(traj_record_dir=save_dir, sub_name='_'.join((docker_name, junction_id)),
                                        veh_info=veh_info, **kwargs)
 
     logger.info(f'轨迹记录已保存在{save_dir}')
@@ -778,5 +778,3 @@ def initialize_score_prepare():
     subscribe_eval_event(EvalEventType.FINISH_TASK, handle_multiple_trajectory_record_event)
     subscribe_eval_event(EvalEventType.START_EVAL, handle_eval_apply_event)
     subscribe_eval_event(EvalEventType.FINISH_EVAL, handle_score_report_event)
-
-# TODO: 1) Pydantic catch error 2) delete file in output

@@ -11,7 +11,7 @@ from simulation.connection.python_fbconv.fbconv import FBConverter
 
 fb_converter = FBConverter(102400)
 msg = {'node_id': {'region': 1, 'id': 80}, 'time_span': {}, 'control_mode': 0, 'cycle': 90, 'base_signal_scheme_id': 0, 'phases': [
-        {'id': 1, 'order': 1, 'movements': ['1', '2', '3'], 'green': 20, 'yellow': 6, 'allred': 0},
+        {'id': 1, 'order': 1, 'movements': [], 'green': 20, 'yellow': 6, 'allred': 0},
         {'id': 2, 'order': 2, 'movements': ['5', '6', '7'], 'green': 20, 'yellow': 6, 'allred': 0},
         {'id': 3, 'order': 3, 'movements': ['9', '10', '11'], 'green': 20, 'yellow': 6, 'allred': 0},
         {'id': 4, 'order': 4, 'movements': ['13', '14', '15'], 'green': 20, 'yellow': 6, 'allred': 0}]}

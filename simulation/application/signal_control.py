@@ -11,6 +11,7 @@ from typing import Tuple, List, Dict, Optional, Any
 import sumolib
 import traci
 import traci.constants as tc
+from pydantic import ValidationError
 
 from simulation.lib.common import logger
 from simulation.lib.net_tool import JunctionConns, entry_movement_sorted
@@ -495,13 +496,17 @@ class SignalController:
 
         # 不允许空的Movement, 使用Pydantic做校验
         for phase in phases:
-            PhasicValidator.model_validate(phase, context={'valid_movements': self.conn_info.valid_sumo_MAP_movement_ext_id()})
+            try:
+                PhasicValidator.model_validate(
+                    phase, context={'valid_movements': self.conn_info.valid_sumo_MAP_movement_ext_id()}
+                )
+            except ValidationError as exc:
+                logger.info(repr(exc.errors()[0]))
+                return None
+
             movements = phase.get('movements')
             green = phase.get('green')
             yellow = phase.get('yellow')
-            if green is None or yellow is None:
-                logger.info('green or yellow argument missed, cannot create control')
-                return None
 
             connection_indexes = []
             for movement in movements:
