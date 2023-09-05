@@ -1,0 +1,48 @@
+{
+    "id": "55555",
+    "name": "point95",
+    "capacity": 4576,
+    "position": {
+      "lat": 312935340,
+      "lon": 1212085550
+    },
+    "link": [
+      {
+        "id": "genE549",
+        "isEntry": 1,
+        "length": 38.75,
+        "speed": 22.22
+      },
+      {
+        "id": "genE545",
+        "isEntry": 1,
+        "length": 40.30,
+        "speed": 22.22
+      },
+      {
+        "id": "genE547",
+        "isEntry": 1,
+        "length": 30.87,
+        "speed": 13.89
+      },
+      {
+        "id": "genE548",
+        "isEntry": 0,
+        "length": 38.75,
+        "speed": 22.22
+      },
+      {
+        "id": "genE544",
+        "isEntry": 0,
+        "length": 40.30,
+        "speed": 22.22
+      },
+      {
+        "id": "genE546",
+        "isEntry": 0,
+        "length": 30.87,
+        "speed": 13.89
+      }
+    ],
+    "control_strategy": 1
+  }
