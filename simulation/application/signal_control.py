@@ -20,7 +20,7 @@ from simulation.lib.public_data import (create_Phasic, create_SignalScheme, crea
                                         create_DateTimeFilter, create_TimeCountingDown, create_PhaseState, create_Phase,
                                         create_DF_IntersectionState, create_SignalPhaseAndTiming, create_PhasicExec,
                                         create_SignalExecution, signalized_intersection_name_decimal, ImplementTask,
-                                        InfoTask, SimStatus, PhasicValidator)
+                                        InfoTask, SimStatus, PhasicValidator, RequestByPhaseValidator)
 
 
 class TLStatus(Enum):
@@ -116,22 +116,26 @@ def get_phase_status(state: str) -> TLStatus:
         return TLStatus.RED
 
 
-def phase_gather(phases: List[traci.trafficlight.Phase]) -> Tuple[List[EasyPhaseTiming], List[List[int]]]:
+def phase_gather(phases: List[traci.trafficlight.Phase]) -> Tuple[List[EasyPhaseTiming], List[List[int]], List[int]]:
     """根据sumo中相位信息转换成按控制车流的相位划分形式"""
     gather_res = []
     index_ptr = None
     state_strings = []
-    for phase in phases:
+    original_index = []
+    for index, phase in enumerate(phases):
         status = get_phase_status(phase.state)  # 表示各junctionlink的信号放行状态
         if index_ptr is None:
             gather_res.append(EasyPhaseTiming.arbitrary_init(phase.duration, status))
             state_strings.append(get_related_movement_from_state(phase.state))  # 保存放行的信号控制机的关联状态
             index_ptr = 0
+            if status is TLStatus.GREEN:
+                original_index.append(index)
             continue
         if status is TLStatus.GREEN:
             gather_res.append(EasyPhaseTiming(green=phase.duration))
             index_ptr += 1  # 出现绿灯时新增一个相位，指针后移一位
             state_strings.append(get_related_movement_from_state(phase.state))
+            original_index.append(index)
         elif status is TLStatus.YELLOW:
             gather_res[index_ptr].yellow = phase.duration
         elif status is TLStatus.RED:
@@ -147,7 +151,7 @@ def phase_gather(phases: List[traci.trafficlight.Phase]) -> Tuple[List[EasyPhase
                 f'not complete signal timing, cannot integrate together, this: {last_item}, other: {first_item}')
 
     # 没有all red的情况进行填充
-    return [item.all_red_complete() for item in gather_res], state_strings
+    return [item.all_red_complete() for item in gather_res], state_strings, original_index
 
 
 ConnInfo = namedtuple('ConnInfo', ['turn', 'from_edge'])
@@ -159,6 +163,7 @@ class SignalController:
     def __init__(self, ints_id: str):
         self.ints_id = ints_id
         self._ints_tl_mapping_from_connection()  # traffic light id, 交叉口内部连接转向，进口道信息
+        self.newly_program_id = None  # 如果未创建新的program, 应通过traci接口读取program ID
 
     @classmethod
     def load_net(cls, net: sumolib.net.Net):
@@ -208,7 +213,7 @@ class SignalController:
         current_program_id = sub_info[tc.TL_CURRENT_PROGRAM]
         curr_logic = self.get_current_logic()
         local_phases: List[traci.trafficlight.Phase] = curr_logic.getPhases()
-        gather_phases, movements = phase_gather(local_phases)  # 按照相位传统定义(车流控制)从SUMO中的相位中进行集合转换处理
+        gather_phases, movements, _ = phase_gather(local_phases)  # 按照相位传统定义(车流控制)从SUMO中的相位中进行集合转换处理
         assert len(gather_phases) == len(movements), \
             f'phase count is not equivalent to movement group count in intersection {self.ints_id}'
 
@@ -247,14 +252,13 @@ class SignalController:
         current_program_id = self.get_subscribe_info()[tc.TL_CURRENT_PROGRAM]
         curr_logic = self.get_current_logic()
         local_phases: List[traci.trafficlight.Phase] = curr_logic.getPhases()
-        gather_phases, movements = phase_gather(local_phases)  # 按照相位传统定义(车流控制)从SUMO中的相位中进行集合转换处理
+        gather_phases, movements, _ = phase_gather(local_phases)  # 按照相位传统定义(车流控制)从SUMO中的相位中进行集合转换处理
         assert len(gather_phases) == len(movements), \
             f'phase count is not equivalent to movement group count in intersection {self.ints_id}'
 
         cycle_length = 0
         phases = []
         for index, (timing, mov) in enumerate(zip(gather_phases, movements), start=1):
-
             phasic_exec = create_PhasicExec(phasic_id=index,
                                             order=index,
                                             movements=self.conn_info.get_connections_movements_str(mov),
@@ -414,7 +418,16 @@ class SignalController:
 
         return next_start_time
 
-    def create_control_task(self, signal_scheme: dict) -> Optional[ImplementTask]:
+    def get_phase_and_consistency_by_id(self, phase_id: int) -> Tuple[int, bool]:
+        phases = self.get_current_logic().getPhases()
+        current_phase_index = self.get_subscribe_info()[tc.TL_CURRENT_PHASE]
+
+        _, _, original_index = phase_gather(phases)
+        target_green_phase_original_index = original_index[phase_id]
+        consistency = True if current_phase_index == target_green_phase_original_index else False
+        return target_green_phase_original_index, consistency
+
+    def create_signal_scheme_control_task(self, signal_scheme: dict) -> Optional[ImplementTask]:
         """
         创建更新信号配时方案任务
         Args:
@@ -425,7 +438,7 @@ class SignalController:
         """
         phases: List[dict] = signal_scheme.get('phases')
         if phases is None or not len(phases):
-            logger.info('invalid signal scheme without phases argument, cannot create control')
+            logger.user_info('invalid signal scheme without phases argument, cannot create control')
             return None
 
         updated_phases_list = []
@@ -498,10 +511,12 @@ class SignalController:
         for phase in phases:
             try:
                 PhasicValidator.model_validate(
-                    phase, context={'valid_movements': self.conn_info.valid_sumo_MAP_movement_ext_id()}
+                    phase, context={'valid_movements': sorted(self.conn_info.valid_sumo_MAP_movement_ext_id(), key=lambda x: int(x))}
                 )
             except ValidationError as exc:
-                logger.info(repr(exc.errors()[0]))
+                exc_info = exc.errors()[0]
+                logger.user_info(f'validation error for SignalScheme message, type: <{exc_info["type"]}>, '
+                                 f'field name: <{exc_info["loc"][0]}>, message: <{exc_info["msg"]}>')
                 return None
 
             movements = phase.get('movements')
@@ -511,10 +526,10 @@ class SignalController:
             connection_indexes = []
             for movement in movements:
                 if not movement.isnumeric():
-                    logger.info(f'movement {movement} is not defined in intersection {self.ints_id}')
+                    logger.user_info(f'movement {movement} is not defined in intersection {self.ints_id}')
                 conn_res = self.conn_info.get_movement_connections(int(movement))
                 if conn_res is None:
-                    logger.warn(f'Movement {movement} not in junction {self.ints_id}')
+                    logger.user_info(f'Movement {movement} not in junction {self.ints_id}')
                     continue
                 connection_indexes.extend(conn_res)
             print(connection_indexes)
@@ -533,14 +548,93 @@ class SignalController:
                 all_red_state = 'r' * len(self.conn_info)
                 updated_phases_list.append(traci.trafficlight.Phase(all_red, all_red_state))
 
-        new_program_id = int(self.get_subscribe_info()[tc.TL_CURRENT_PROGRAM]) + 1
-        updated_logic = traci.trafficlight.Logic(str(new_program_id), 0, 0, phases=updated_phases_list)
+        if self.newly_program_id is None:
+            self.newly_program_id = int(self.get_subscribe_info()[tc.TL_CURRENT_PROGRAM]) + 1
+        else:
+            self.newly_program_id += 1
+        updated_logic = traci.trafficlight.Logic(str(self.newly_program_id), 0, 0, phases=updated_phases_list)
 
         exec_time = self.get_next_cycle_start() + SimStatus.sim_time_stamp
         logger.info(f'signal update task of junction {self.ints_id} created')
         return ImplementTask(self._inner_set_program_logic, args=(self.tls_id, updated_logic), exec_time=exec_time)
 
+    def create_signal_request_control_task(self, signal_request: dict) -> Optional[List[ImplementTask]]:
+        if signal_request.get('details_type', None) != 'DF_SignalRequestByPhase':
+            logger.user_info('details_type is supposed to be SignalRequestByPhase')
+            return None
+
+        request_by_phase = signal_request.get('details', None)
+        if request_by_phase is None:
+            logger.user_info('request details is missing')
+            return None
+
+        phases = self.get_current_logic().getPhases()
+        if len(phases) == 1:
+            logger.user_info('last green extension action has not accomplished, cannot create new action')
+            return None
+
+        gather_phase_count = len(phase_gather(phases))
+
+        try:
+            RequestByPhaseValidator.model_validate(
+                request_by_phase, context={'valid_phase_id': list(range(1, gather_phase_count + 1))}
+            )
+        except ValidationError as exc:
+            exc_info = exc.errors()[0]
+            logger.user_info(f'validation error for SignalRequest message, type: <{exc_info["type"]}>, '
+                             f'field name: <{exc_info["loc"][0]}>, message: <{exc_info["msg"]}>')
+            return None
+
+        next_phase_id = request_by_phase['next_phasic_id'] - 1  # index start from 1
+        effective_time = request_by_phase['effective_time']
+        selected_green_phase_original_index, consistency = self.get_phase_and_consistency_by_id(next_phase_id)
+        state_string = phases[selected_green_phase_original_index].state
+
+        newly_program_id = self.get_subscribe_info()[tc.TL_CURRENT_PROGRAM] if self.newly_program_id is None \
+            else self.newly_program_id
+
+        recover_logic = self.get_current_logic()
+        if consistency:
+            task = ImplementTask(self._inner_set_phase_manually, args=(self.tls_id, state_string),
+                                 exec_time=SimStatus.sim_time_stamp)
+
+            # recover status of signal after this modification is over
+            recover_time = self.get_subscribe_info()[tc.TL_NEXT_SWITCH] + effective_time
+            recover_logic.currentPhaseIndex = (selected_green_phase_original_index + 1) % len(recover_logic.phases)
+
+            recover_task_pre = ImplementTask(self._inner_set_program, args=(self.tls_id, newly_program_id),
+                                             exec_time=recover_time)
+            recover_task_post = ImplementTask(self._inner_set_program_logic, args=(self.tls_id, recover_logic),
+                                              exec_time=recover_time)
+
+        else:
+            switch_time = effective_time + SimStatus.sim_time_stamp
+            task = ImplementTask(self._inner_set_phase_manually, args=(self.tls_id, state_string),
+                                 exec_time=switch_time)
+
+            recover_logic.currentPhaseIndex = selected_green_phase_original_index
+            # switch control mode to automate
+            recover_task_pre = ImplementTask(self._inner_set_program, args=(self.tls_id, newly_program_id),
+                                             exec_time=switch_time)
+            # switch to correct phase
+            recover_task_post = ImplementTask(self._inner_set_program_logic, args=(self.tls_id, recover_logic),
+                                              exec_time=switch_time)
+        logger.info(f'signal update task of junction {self.ints_id} created')
+        return [task, recover_task_pre, recover_task_post]
+
+    @staticmethod
+    def _inner_set_phase_manually(tls_id, state_string):
+        """Since setting phase by calling this method, the change of state
+         should be applied as the same way from then on"""
+        traci.trafficlight.setRedYellowGreenState(tls_id, state_string)
+        return True, None
+
     @staticmethod
     def _inner_set_program_logic(tls_id, updated_logic):
         traci.trafficlight.setProgramLogic(tls_id, updated_logic)
+        return True, None
+
+    @staticmethod
+    def _inner_set_program(tls_id, program_id):
+        traci.trafficlight.setProgram(tls_id, program_id)
         return True, None

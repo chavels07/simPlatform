@@ -21,6 +21,7 @@ class DataMsg(MsgType):
     # 标准数据结构
     SignalScheme = auto()
     SignalExecution = auto()
+    SignalRequest = auto()
     SpeedGuide = auto()
     SafetyMessage = auto()
     RoadsideSafetyMessage = auto()

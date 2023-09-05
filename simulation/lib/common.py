@@ -9,10 +9,44 @@ from inspect import signature
 from functools import wraps
 from typing import Union
 
-logging.basicConfig(format='%(asctime)s.%(msecs)03d [%(levelname)s] [%(filename)s:%(lineno)d] %(message)s',
-                    datefmt='## %Y-%m-%d %H:%M:%S')
+# '%(asctime)s.%(msecs)03d [%(levelname)s] [%(filename)s:%(lineno)d] %(message)s'
+# logging.basicConfig(format='%(asctime)s.%(msecs)03d [%(levelname)s] %(message)s',
+#                     datefmt='## %Y-%m-%d %H:%M:%S')
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
+
+formatter = logging.Formatter(fmt='%(asctime)s.%(msecs)03d [%(levelname)s] %(message)s',
+                              datefmt='## %Y-%m-%d %H:%M:%S')
+logger_handler = logging.StreamHandler()
+logger_handler.setFormatter(formatter)
+logger.addHandler(logger_handler)
+
+
+class UserLogger:
+    def __init__(self, _logger: logging.Logger):
+        self._logger = _logger
+        self._user_info_cache = []
+
+    def debug(self, msg: str):
+        self._logger.debug(msg)
+
+    def info(self, msg: str):
+        self._logger.info(msg)
+
+    def warning(self, msg: str):
+        self._logger.warning(msg)
+
+    def user_info(self, msg: str):
+        self._user_info_cache.append(msg)
+        self.info(msg)
+
+    def pop_user_info(self):
+        rv = self._user_info_cache
+        self._user_info_cache = []
+        return rv
+
+
+logger = UserLogger(logger)
 
 
 def singleton(cls):

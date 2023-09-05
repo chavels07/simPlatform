@@ -9,7 +9,7 @@ import weakref
 from datetime import datetime, timedelta
 from typing import Tuple, List, Dict, Callable, Any, Optional, Union
 
-from pydantic import BaseModel, field_validator, Field, PositiveInt, FieldValidationInfo
+from pydantic import BaseModel, field_validator, Field, PositiveInt, FieldValidationInfo, NonNegativeInt
 
 from simulation.lib.common import alltypeassert
 from simulation.lib.public_conn_data import PubMsgLabel
@@ -720,7 +720,7 @@ def create_TrafficFlow(node: dict,
 class PhasicValidator(BaseModel):
     order: PositiveInt
     green: PositiveInt
-    yellow: PositiveInt
+    yellow: NonNegativeInt
     movements: List[str] = Field(min_length=1)
 
     @field_validator('movements')
@@ -729,10 +729,22 @@ class PhasicValidator(BaseModel):
         # if not len(value):
         #     raise ValueError('SignalScheme movements字段不能为空列表')
 
-        context = info.context
-        valid_movements = context['valid_movements']
+        valid_movements = info.context['valid_movements']
         if any(mov not in valid_movements for mov in value):
             raise ValueError(f'SignalScheme 包含不正确的movement, 合法相位:{valid_movements}')
+        return value
+
+
+class RequestByPhaseValidator(BaseModel):
+    next_phasic_id: PositiveInt
+    effective_time: NonNegativeInt
+
+    @field_validator('next_phasic_id')
+    @classmethod
+    def phasic_id_validator(cls, value: int, info: FieldValidationInfo):
+        valid_phase_id = info.context['valid_phase_id']
+        if value not in valid_phase_id:
+            raise ValueError(f'SignalRequest PhasicID不在可选范围内, 合法相位编号: {valid_phase_id}')
         return value
 
 

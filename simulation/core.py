@@ -167,13 +167,18 @@ class Simulation:
         """快速注册从接收的数据转换成任务的处理方法"""
         self.task_queue.register_task_creator(
             DataMsg.SignalScheme,
-            partial(self.storage.create_signal_update_task, callback=implement_counter.implement_reaction)
+            partial(self.storage.create_signal_scheme_update_task, callback=implement_counter.implement_reaction)
         )
+        self.task_queue.register_task_creator(
+            DataMsg.SignalRequest,
+            partial(self.storage.create_signal_request_update_task, callback=implement_counter.implement_reaction)
+        )
+
         self.task_queue.register_task_creator(
             DataMsg.SpeedGuide,
             partial(self.storage.create_speed_guide_task, callback=implement_counter.implement_reaction)
         )
-        # self.task_create_func[DataMsg.SignalScheme] = self.storage.create_signal_update_task
+        # self.task_create_func[DataMsg.SignalScheme] = self.storage.create_signal_scheme_update_task
         # self.task_create_func[DataMsg.SpeedGuide] = self.storage.create_speed_guide_task
         # self.task_create_func[SpecialDataMsg.TransitionSS] = ...  # TODO: 过渡方案，要求获取signal_scheme的task
         # self.task_create_func[SpecialDataMsg.SERequirement] = ...
@@ -764,7 +769,12 @@ def handle_score_report_event(*args, **kwargs) -> None:
         all_result['score'] = float(all_result['score']) / float(eval_count)
     else:
         detail['errorTimes'] = 1
-        detail['detailInfo'] = 'No valid execution received from Algorithm'
+        detail['detailInfo'].append('No valid execution received from Algorithm')
+
+    # deliver user information for unsuccessful execution
+    for user_info in logger.pop_user_info():
+        detail['detailInfo'].append(user_info)
+
     all_result['detail'] = detail
     connection = kwargs.get('connection')
     print(f'测试{config.SetupConfig.test_name!r}测评结果: {all_result}')

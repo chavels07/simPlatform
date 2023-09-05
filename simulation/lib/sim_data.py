@@ -19,6 +19,7 @@ from simulation.application.vehicle_control import VehicleController
 
 # IntersectionId = NewType('IntersectionId', str)
 
+CONTROL_NODE_ID = 80
 
 @dataclass
 class TransitionIntersection:
@@ -166,9 +167,9 @@ class SimInfoStorage:
             for jun_veh in self.junction_veh_cons.values():
                 jun_veh.subscribe_info(region_dis=150)
 
-    def create_signal_update_task(self,
-                                  signal_scheme: dict,
-                                  callback: Callable[[], None] = None) -> Optional[ImplementTask]:
+    def create_signal_scheme_update_task(self,
+                                         signal_scheme: dict,
+                                         callback: Callable[[], None] = None) -> Optional[ImplementTask]:
         """
         根据SignalScheme消息创建信号更新任务
         Args:
@@ -192,11 +193,28 @@ class SimInfoStorage:
             logger.info(f'cannot find intersection {node_name} in the network for signal scheme data')
             return None
 
-        sc_control_task = sc.create_control_task(signal_scheme)
+        sc_control_task = sc.create_signal_scheme_control_task(signal_scheme)
 
         if sc_control_task is not None and callback is not None:
             callback()
         return sc_control_task
+
+    def create_signal_request_update_task(self,
+                                          signal_request: dict,
+                                          callback: Callable[[], None] = None) -> Optional[List[ImplementTask]]:
+        # TODO: 使用固定的nodeId由于signalRequest不包含nodeId字段
+        node_name = signalized_intersection_name_str(CONTROL_NODE_ID)
+        sc = self.signal_controllers.get(node_name)
+        if sc is None:
+            logger.info(f'cannot find intersection {node_name} in the network for signal scheme data')
+            return None
+
+        sr_control_task = sc.create_signal_request_control_task(signal_request)
+
+        if sr_control_task is not None and callback is not None:
+            callback()
+
+        return sr_control_task
 
     def create_speed_guide_task(self,
                                 MSG_SpeedGuide: dict,

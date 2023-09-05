@@ -23,6 +23,7 @@ _MsgProperty = namedtuple('MsgProperty', ['topic_name', 'fb_code'])
 MSG_TYPE_INFO = {
     # 订阅
     DataMsg.SignalScheme: _MsgProperty('MECUpload/1/SignalScheme', 0x24),
+    DataMsg.SignalRequest: _MsgProperty('MECUpload/1/SignalRequest', 0x31),
     DataMsg.SpeedGuide: _MsgProperty('MECUpload/1/SpeedGuide', 0x34),
 
     # 自定义数据结构，通过json直接传递，None表示无需转换fb
