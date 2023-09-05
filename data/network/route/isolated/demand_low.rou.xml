@@ -14,16 +14,16 @@
     <route id="ss" edges="genE1111 genE522 genE525"/>
     <route id="sl" edges="genE1111 genE522 genE527"/>
     <route id="sr" edges="genE1111 genE522 genE523"/>
-    <flow id="1" period="exp(0.18)" route="ws" departSpeed="max" departLane="best"/>
-    <flow id="2" period="exp(0.04)" route="wl" departSpeed="max" departLane="best"/>
-    <flow id="3" period="exp(0.02)" route="wr" departSpeed="max" departLane="best"/>
-    <flow id="4" period="exp(0.2)" route="es" departSpeed="max" departLane="best"/>
-    <flow id="5" period="exp(0.03)" route="el" departSpeed="max" departLane="best"/>
-    <flow id="6" period="exp(0.03)" route="er" departSpeed="max" departLane="best"/>
-    <flow id="7" period="exp(0.1)" route="ns" departSpeed="max" departLane="best"/>
-    <flow id="8" period="exp(0.05)" route="nl" departSpeed="max" departLane="best"/>
-    <flow id="9" period="exp(0.02)" route="nr" departSpeed="max" departLane="best"/>
-    <flow id="10" period="exp(0.08)" route="ss" departSpeed="max" departLane="best"/>
-    <flow id="11" period="exp(0.04)" route="sl" departSpeed="max" departLane="best"/>
-    <flow id="12" period="exp(0.02)" route="sr" departSpeed="max" departLane="best"/>
+    <flow id="flow1" period="exp(0.18)" route="ws" departSpeed="max" departLane="best"/>
+    <flow id="flow2" period="exp(0.04)" route="wl" departSpeed="max" departLane="best"/>
+    <flow id="flow3" period="exp(0.02)" route="wr" departSpeed="max" departLane="best"/>
+    <flow id="flow4" period="exp(0.2)" route="es" departSpeed="max" departLane="best"/>
+    <flow id="flow5" period="exp(0.03)" route="el" departSpeed="max" departLane="best"/>
+    <flow id="flow6" period="exp(0.03)" route="er" departSpeed="max" departLane="best"/>
+    <flow id="flow7" period="exp(0.1)" route="ns" departSpeed="max" departLane="best"/>
+    <flow id="flow8" period="exp(0.05)" route="nl" departSpeed="max" departLane="best"/>
+    <flow id="flow9" period="exp(0.02)" route="nr" departSpeed="max" departLane="best"/>
+    <flow id="flow10" period="exp(0.08)" route="ss" departSpeed="max" departLane="best"/>
+    <flow id="flow11" period="exp(0.04)" route="sl" departSpeed="max" departLane="best"/>
+    <flow id="flow12" period="exp(0.02)" route="sr" departSpeed="max" departLane="best"/>
 </routes>

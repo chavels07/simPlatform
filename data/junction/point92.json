@@ -1,0 +1,96 @@
+{
+    "id": "49604",
+    "name": "point92",
+    "capacity": 7129,
+    "position": {
+      "lat": 312972469,
+      "lon": 1211868312
+    },
+    "link": [
+      {
+        "id": "genE522",
+        "isEntry": 1,
+        "length": 36.89,
+        "speed": 13.89
+      },
+      {
+        "id": "genE1111",
+        "isEntry": 1,
+        "length": 178.11,
+        "speed": 13.89
+      },
+      {
+        "id": "genE524",
+        "isEntry": 1,
+        "length": 69.17,
+        "speed": 22.22
+      },
+      {
+        "id": "genE533",
+        "isEntry": 1,
+        "length": 251.01,
+        "speed": 22.22
+      },
+      {
+        "id": "genE526",
+        "isEntry": 1,
+        "length": 55.78,
+        "speed": 13.89
+      },
+      {
+        "id": "-107181",
+        "isEntry": 1,
+        "length": 464.25,
+        "speed": 13.89
+      },
+      {
+        "id": "genE528",
+        "isEntry": 1,
+        "length": 88.60,
+        "speed": 22.22
+      },
+      {
+        "id": "genE568",
+        "isEntry": 1,
+        "length": 311.33,
+        "speed": 22.22
+      },
+      {
+        "id": "genE521",
+        "isEntry": 0,
+        "length": 36.21,
+        "speed": 13.89
+      },
+      {
+        "id": "genE1112",
+        "isEntry": 0,
+        "length": 178.11,
+        "speed": 13.89
+      },
+      {
+        "id": "genE523",
+        "isEntry": 0,
+        "length": 328.36,
+        "speed": 22.22
+      },
+      {
+        "id": "genE525",
+        "isEntry": 0,
+        "length": 528.03,
+        "speed": 13.89
+      },
+      {
+        "id": "genE527",
+        "isEntry": 0,
+        "length": 291.93,
+        "speed": 22.22
+      },
+      {
+        "id": "genE569",
+        "isEntry": 0,
+        "length": 107.98,
+        "speed": 22.22
+      }
+    ],
+    "control_strategy": 1
+  }
