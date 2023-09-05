@@ -8,6 +8,7 @@ import sys
 import json
 import subprocess
 import time
+import traceback
 import heapq
 
 from collections import defaultdict, abc
@@ -134,26 +135,30 @@ class Simulation:
         self._reset()  # 预先清楚上一次仿真运行可能遗留的数据
 
         logger.info('仿真开始')
-        while traci.simulation.getMinExpectedNumber() >= 0:
+        try:
+            while traci.simulation.getMinExpectedNumber() >= 0:
 
-            self.sim_core.run_single_step()
-            # time.sleep(0.03)
+                self.sim_core.run_single_step()
+                # time.sleep(0.03)
 
-            if self.sim_core.waiting_warm_up():
-                continue
+                if self.sim_core.waiting_warm_up():
+                    continue
 
-            self.storage.update_storage()  # 执行storage更新任务
+                self.storage.update_storage()  # 执行storage更新任务
 
-            # 处理接收到的数据类消息，转化成控制任务
-            for msg_type, msg_info in connection.loading_msg(DataMsg):
-                self.task_queue.handle_current_msg(msg_type, msg_info)
+                # 处理接收到的数据类消息，转化成控制任务
+                for msg_type, msg_info in connection.loading_msg(DataMsg):
+                    self.task_queue.handle_current_msg(msg_type, msg_info)
 
-            # 推送各消息类任务产生消息
-            for msg in chain(self.task_queue.cycle_task_execute(), self.task_queue.single_task_execute()):
-                connection.publish(msg)
+                # 推送各消息类任务产生消息
+                for msg in chain(self.task_queue.cycle_task_execute(), self.task_queue.single_task_execute()):
+                    connection.publish(msg)
 
-            if self.sim_core.reach_limit():
-                break  # 完成仿真任务提前终止仿真程序
+                if self.sim_core.reach_limit():
+                    break  # 完成仿真任务提前终止仿真程序
+        except Exception:
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            logger.error(''.join(traceback.format_exception(exc_type, exc_value, exc_traceback)))
 
         logger.info('仿真结束')
         SimStatus.reset()  # 仿真状态信息重置
@@ -655,6 +660,7 @@ def emit_eval_event(event: EvalEventType, *args, **kwargs):
 
 def handle_data_reload_event(*args, **kwargs) -> None:
     implement_counter.reset()  # 重置执行计数器计数
+    logger.reset_user_info()
 
 
 def handle_trajectory_record_event(*args, **kwargs) -> None:

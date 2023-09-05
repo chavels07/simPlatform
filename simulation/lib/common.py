@@ -3,6 +3,7 @@
 # @File        : common.py
 # @Description : 通用的工具
 
+import os
 import logging
 import time
 from inspect import signature
@@ -12,14 +13,20 @@ from typing import Union
 # '%(asctime)s.%(msecs)03d [%(levelname)s] [%(filename)s:%(lineno)d] %(message)s'
 # logging.basicConfig(format='%(asctime)s.%(msecs)03d [%(levelname)s] %(message)s',
 #                     datefmt='## %Y-%m-%d %H:%M:%S')
-logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
+raw_logger = logging.getLogger()
+raw_logger.setLevel(logging.DEBUG)
 
 formatter = logging.Formatter(fmt='%(asctime)s.%(msecs)03d [%(levelname)s] %(message)s',
                               datefmt='## %Y-%m-%d %H:%M:%S')
 logger_handler = logging.StreamHandler()
 logger_handler.setFormatter(formatter)
-logger.addHandler(logger_handler)
+raw_logger.addHandler(logger_handler)
+
+project_directory_path = os.path.dirname(os.getcwd())
+file_handler = logging.FileHandler(os.path.join(project_directory_path, 'logs', 'run.log'), encoding='utf-8')
+file_handler.setLevel(logging.ERROR)
+file_handler.setFormatter(formatter)
+raw_logger.addHandler(file_handler)
 
 
 class UserLogger:
@@ -36,6 +43,9 @@ class UserLogger:
     def warning(self, msg: str):
         self._logger.warning(msg)
 
+    def error(self, msg: str):
+        self._logger.error(msg)
+
     def user_info(self, msg: str):
         self._user_info_cache.append(msg)
         self.info(msg)
@@ -45,8 +55,11 @@ class UserLogger:
         self._user_info_cache = []
         return rv
 
+    def reset_user_info(self):
+        self._user_info_cache.clear()
 
-logger = UserLogger(logger)
+
+logger = UserLogger(raw_logger)
 
 
 def singleton(cls):
