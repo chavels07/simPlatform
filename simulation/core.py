@@ -5,6 +5,7 @@
 
 import os
 import sys
+import re
 import json
 import subprocess
 import time
@@ -191,11 +192,11 @@ class Simulation:
     def auto_activate_publish(self):
         """自动读取Config激活需要发送的消息类型"""
         msg_mapping = {
-            'basic_safety_message': self.task_queue.activate_bsm_publish,
-            'roadside_safety_message': self.task_queue.activate_rsm_publish,
-            'signal_phase_and_timing': self.task_queue.activate_spat_publish,
-            'traffic_flow': self.task_queue.activate_traffic_flow_publish,
-            'signal_execution': self.task_queue.activate_signal_execution_publish
+            'basicSafetyMessage': self.task_queue.activate_bsm_publish,
+            'roadsideSafetyMessage': self.task_queue.activate_rsm_publish,
+            'signalPhaseAndTiming': self.task_queue.activate_spat_publish,
+            'trafficFlow': self.task_queue.activate_traffic_flow_publish,
+            'signalExecution': self.task_queue.activate_signal_execution_publish
         }
 
         for msg_type, pub_cycle in config.SimulationConfig.pub_msgs:
@@ -527,16 +528,17 @@ class AlgorithmEval:
         # 注册任务生成函数
         self.sim.quick_register_task_creator_all()
 
-    def sim_task_start(self, connection: MQTTConnection):
+    def sim_task_start(self, connection: MQTTConnection, sim_task_name: str = 'default'):
         """开始运行仿真任务"""
-        emit_eval_event(EvalEventType.BEFORE_TASK)
+        emit_eval_event(EvalEventType.BEFORE_TASK, connection=connection)
         self.sim.run(connection=connection)
         emit_eval_event(EvalEventType.FINISH_TASK, sim_core=self.sim, eval_record=self.eval_record,
                         trajectories=self.sim.storage.trajectory_info, docker_name=self.testing_name)
 
         traci.close()
 
-        self.eval_task_start(connection=connection, docker_name=self.testing_name)
+        self.eval_task_start(connection=connection, docker_name=self.testing_name, task_name=sim_task_name,
+                             eval_record=self.eval_record)
 
     def eval_task_start(*args, **kwargs):
         emit_eval_event(EvalEventType.START_EVAL, *args, **kwargs)
@@ -550,6 +552,11 @@ class AlgorithmEval:
         """从单个流量文件创建测评任务"""
         self._initialize_simulation(route_fp)
         self.sim_task_start(connection)
+
+        emit_eval_event(EvalEventType.FINISH_ALL_TEST_BATCH,
+                        docker_name=self.testing_name,
+                        connection=connection,
+                        eval_record=self.eval_record)
 
     def sim_task_from_directory(self, connection: MQTTConnection, sce_dir_fp: str, *, f_name_startswith: str = None):
         """
@@ -567,9 +574,14 @@ class AlgorithmEval:
         for file in os.listdir(sce_dir_fp):
             if f_name_startswith is None or file.startswith(f_name_startswith):
                 route_fps.append('/'.join((sce_dir_fp, file)))
-        for route_fp in route_fps:
+        for index, route_fp in enumerate(route_fps, start=1):
             self._initialize_simulation(route_fp=route_fp)
-            self.sim_task_start(connection)
+            self.sim_task_start(connection, sim_task_name=str(index))
+
+        emit_eval_event(EvalEventType.FINISH_ALL_TEST_BATCH,
+                        docker_name=self.testing_name,
+                        connection=connection,
+                        eval_record=self.eval_record)
 
     def mode_setting(self, route_fp: str, multiple_file: bool) -> None:
         """
@@ -598,19 +610,19 @@ class AlgorithmEval:
         Returns:
 
         """
-        sim = self.sim
-        # if not sim.is_connected():
-        #     raise RuntimeError('与服务器处于未连接状态,请先创建连接')
         while True:
             recv_msgs = connection.loading_msg(OrderMsg)
 
             # 有数据时会才会进入循环
             for msg_type, msg_ in recv_msgs:
                 if msg_type is OrderMsg.Start:
-                    self.testing_name = msg_['docker'].split(test_name_split)[-1]  # 获取分割后的最后一部分作为测试名称
-                    self.__eval_start_func(connection)
+                    test_name = re.findall('algo/(\S+)\|', msg_['docker'])
+                    if not test_name:
+                        logger.warning(f'invalid test name {test_name}')
+                        continue
 
-                    self.eval_task_start(connection=connection, docker_name=self.testing_name)
+                    self.testing_name = test_name[0]  # 获取分割后的最后一部分作为测试名称
+                    self.__eval_start_func(connection)
 
     def start(self, connection: MQTTConnection):
         """运行仿真测评"""
@@ -629,6 +641,7 @@ class EvalEventType(Enum):
     BEFORE_TASK = auto()
     FINISH_TASK = auto()
     FINISH_EVAL = auto()
+    FINISH_ALL_TEST_BATCH = auto()
 
 
 class EventArgumentError(AttributeError):
@@ -661,6 +674,10 @@ def emit_eval_event(event: EvalEventType, *args, **kwargs):
 def handle_data_reload_event(*args, **kwargs) -> None:
     implement_counter.reset()  # 重置执行计数器计数
     logger.reset_user_info()
+
+    connection: MQTTConnection = kwargs.get('connection')
+    if connection is not None:
+        connection.clear_residual_data()
 
 
 def handle_trajectory_record_event(*args, **kwargs) -> None:
@@ -751,6 +768,7 @@ def handle_score_report_event(*args, **kwargs) -> None:
         1) eval_record_dir: str 评测结果存储路径
         2) docker_name: str docker名
         3) connection mqtt连接
+        4) eval_record: list
     """
     eval_record_dir = kwargs.get('eval_record_dir', '../data/evaluation')
     docker_name = kwargs.get('docker_name', 'test')
@@ -758,7 +776,7 @@ def handle_score_report_event(*args, **kwargs) -> None:
     # eval_record_dir = kwargs.get('eval_record_dir')
     # docker_name = kwargs.get('docker_name')
     all_result = {'score': 0, 'name': docker_name, 'abnormal': 0}
-    detail = {'errorTimes': 0, 'detailInfo': []}
+    detail = {'errorTimes': 0, 'detailInfo': [], 'errorInfo': []}
     if implement_counter.valid_implement:
         eval_count = 0
         for file in os.listdir(os.path.join(eval_record_dir, docker_name)):
@@ -775,16 +793,54 @@ def handle_score_report_event(*args, **kwargs) -> None:
         all_result['score'] = float(all_result['score']) / float(eval_count)
     else:
         detail['errorTimes'] = 1
-        detail['detailInfo'].append('No valid execution received from Algorithm')
+        detail['errorInfo'].append('No valid execution received from Algorithm')
 
     # deliver user information for unsuccessful execution
     for user_info in logger.pop_user_info():
-        detail['detailInfo'].append(user_info)
+        detail['errorTimes'] += 1
+        detail['errorInfo'].append(user_info)
 
     all_result['detail'] = detail
+
+    eval_record = kwargs.get('eval_record')
+    if eval_record is None:
+        # 如果未给定记录集合, 直接通过发布评测结果
+        connection = kwargs.get('connection')
+        print(f'测试{config.SetupConfig.test_name!r}测评结果: {all_result}')
+        connection.publish(PubMsgLabel(all_result, OrderMsg.ScoreReport, 'json'))
+
+    task_name = kwargs.get('task_name', 'default')
+    eval_record[task_name] = all_result
+
+
+def handle_test_batch_complete(*args, **kwargs) -> None:
+    docker_name = kwargs.get('docker_name', 'test')
+    eval_record: Dict[str, dict] = kwargs.get('eval_record')
+
+    if not eval_record:
+        return None
+
+    score_res = []
+    abnormal_count = 0
+    detail = []
+    for task_name, single_eval_result in eval_record.items():
+        if single_eval_result['score'] == 0:
+            abnormal_count += 1
+        score_res.append(single_eval_result['score'])
+        detail.append(single_eval_result['detail'])
+    assemble_res = {
+        'score': 0 if abnormal_count else sum(score_res) / len(score_res),
+        'name': docker_name,
+        'abnormal': abnormal_count,
+        'detail': detail
+    }
+
+    # clear the dict without influencing the nested data required to report
+    eval_record.clear()
     connection = kwargs.get('connection')
-    print(f'测试{config.SetupConfig.test_name!r}测评结果: {all_result}')
-    connection.publish(PubMsgLabel(all_result, OrderMsg.ScoreReport, 'json'))
+    print(f'测试综合测评结果: {assemble_res}')
+
+    connection.publish(PubMsgLabel(assemble_res, OrderMsg.ScoreReport, 'json'))
 
 
 def initialize_score_prepare():
@@ -794,3 +850,4 @@ def initialize_score_prepare():
     subscribe_eval_event(EvalEventType.FINISH_TASK, handle_multiple_trajectory_record_event)
     subscribe_eval_event(EvalEventType.START_EVAL, handle_eval_apply_event)
     subscribe_eval_event(EvalEventType.FINISH_EVAL, handle_score_report_event)
+    subscribe_eval_event(EvalEventType.FINISH_ALL_TEST_BATCH, handle_test_batch_complete)
