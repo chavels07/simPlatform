@@ -818,7 +818,7 @@ def handle_score_report_event(*args, **kwargs) -> None:
 def handle_test_batch_complete(*args, **kwargs) -> None:
     docker_name = kwargs.get('docker_name', 'test')
     eval_record: Dict[str, dict] = kwargs.get('eval_record')
-    eval_record_dir = kwargs.get('eval_record_path', '../data/evaluation')
+    eval_record_dir = kwargs.get('eval_output_path', '../data/output')
 
     docker_eval_record_dir = os.path.join(eval_record_dir, docker_name)
     if not os.path.exists(docker_eval_record_dir):
