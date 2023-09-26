@@ -1,0 +1,34 @@
+preliminary:
+  configFilePath: data/network/anting.sumocfg
+  networkFilePath: data/network/yutanglu1207.net.xml
+  routeFilePath: data/network/route/field_isolated
+  detectorFilePath: ~
+  testName: Test
+  arterialMode: true
+  awaitStartCmd: false
+
+simulation:
+  pubMsg:
+    -
+      name: basicSafetyMessage
+      frequency: -1
+    -
+      name: roadsideSafetyMessage
+      frequency: -1
+    -
+      name: signalPhaseAndTiming
+      frequency: -1
+    -
+      name: trafficFlow
+      frequency: -1
+    -
+      name: signalExecution
+      frequency: -1
+  junctionRegion: ['point920']
+  simTimeStep: 0.1
+  simTimeLimit: 300
+  warmUpTime: 30
+
+connection:
+  broker: 121.36.231.253
+  port: 1883
