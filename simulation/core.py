@@ -551,6 +551,7 @@ class AlgorithmEval:
     def sim_task_single_scenario(self, connection: MQTTConnection, route_fp: str):
         """从单个流量文件创建测评任务"""
         self._initialize_simulation(route_fp)
+        self.sim.auto_activate_publish()
         self.sim_task_start(connection)
 
         emit_eval_event(EvalEventType.FINISH_ALL_TEST_BATCH,
@@ -576,6 +577,7 @@ class AlgorithmEval:
                 route_fps.append('/'.join((sce_dir_fp, file)))
         for index, route_fp in enumerate(route_fps, start=1):
             self._initialize_simulation(route_fp=route_fp)
+            self.sim.auto_activate_publish()
             self.sim_task_start(connection, sim_task_name=str(index))
 
         emit_eval_event(EvalEventType.FINISH_ALL_TEST_BATCH,
@@ -816,6 +818,11 @@ def handle_score_report_event(*args, **kwargs) -> None:
 def handle_test_batch_complete(*args, **kwargs) -> None:
     docker_name = kwargs.get('docker_name', 'test')
     eval_record: Dict[str, dict] = kwargs.get('eval_record')
+    eval_record_dir = kwargs.get('eval_record_path', '../data/evaluation')
+
+    docker_eval_record_dir = os.path.join(eval_record_dir, docker_name)
+    if not os.path.exists(docker_eval_record_dir):
+        os.mkdir(docker_eval_record_dir)
 
     if not eval_record:
         return None
@@ -828,6 +835,9 @@ def handle_test_batch_complete(*args, **kwargs) -> None:
             abnormal_count += 1
         score_res.append(single_eval_result['score'])
         detail.append(single_eval_result['detail'])
+        score_record_name = os.path.join(docker_eval_record_dir, f'{docker_name}_{task_name}.json')
+        with open(score_record_name, 'w') as f:
+            json.dump(single_eval_result, f, indent=2)
     assemble_res = {
         'score': 0 if abnormal_count else sum(score_res) / len(score_res),
         'name': docker_name,

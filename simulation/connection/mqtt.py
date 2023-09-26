@@ -237,14 +237,20 @@ class PubClient:
         client = Client(client_id)
         client.on_connect = on_connect
         client.disconnect = on_disconnect
+        client.reconnect_delay_set()
         client.connect(broker, port)
         return client
 
     def _publish(self, topic: str, msg: str):
         """通过客户端发布单条消息"""
         msg_info = self.client.publish(topic, msg)
+        if msg_info.rc == 0:
+            return
+        logger.info(f'fail to send message to topic {topic}, return code: {msg_info.rc}')
+        self.client.reconnect()
+        msg_info = self.client.publish(topic, msg)
         if msg_info.rc != 0:
-            logger.info(f'fail to send message to topic {topic}, return code: {msg_info.rc}')
+            raise RuntimeError('Cannot reconnect')
 
     def publish(self, msg_label: PubMsgLabel):
         """根据推送消息标记发布单条或多条消息"""

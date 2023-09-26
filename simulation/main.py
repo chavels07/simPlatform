@@ -14,7 +14,7 @@ if __name__ == '__main__':
 
     algorithm_eval = AlgorithmEval()
     algorithm_eval.initialize_storage()
-    algorithm_eval.sim.auto_activate_publish()
+    # algorithm_eval.sim.auto_activate_publish()
     algorithm_eval.start(connection)
 
 

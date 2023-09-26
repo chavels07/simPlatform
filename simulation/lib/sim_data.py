@@ -19,7 +19,7 @@ from simulation.application.vehicle_control import VehicleController
 
 # IntersectionId = NewType('IntersectionId', str)
 
-CONTROL_NODE_ID = 80
+CONTROL_NODE_ID = 920
 
 @dataclass
 class TransitionIntersection:

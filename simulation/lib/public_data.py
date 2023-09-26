@@ -767,7 +767,9 @@ def signalized_intersection_name_decimal(ints: str) -> int:
     elif ints.startswith('-'):
         ints_num = MINUS_NUMERIC_PAT.match(ints).group(1)
     else:
-        raise ValueError(f'unexpected intersection name: {ints}')
+        if not ints.isnumeric():
+            raise ValueError(f'unexpected intersection name: {ints}')
+        ints_num = ints
     return int(ints_num)
     # return 10  # Temporary
 

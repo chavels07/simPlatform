@@ -310,6 +310,7 @@ class JunctionVehContainer:
                 edge_id = ''
             elif edge_id.endswith(string.digits) and edge_id[-2] == '_':
                 continue  # 除了交叉口外其他junction连接段不保存数据
+            edge_id = edge_id.rsplit('_', 1)[0]
             trajectories[str(veh_info.ptcId)] = create_trajectory(ptcId=veh_info.ptcId,
                                                                   lat=veh_info.lat,
                                                                   lon=veh_info.lon,
