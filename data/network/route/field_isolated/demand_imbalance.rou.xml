@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<routes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/routes_file.xsd">
+	<vType accel="0.8" decel="4.5" id="Normal" laneChangeModel="LC2013" lcKeepRight="0" lcStrategic="1" lcMaxSpeedLatStanding="0" maxSpeed="13.89"/>
+    <flow id="flow1" from="AyE3bDm3uL.279.0062987000" to="-0KUyAFxYUW.75.5444242900" begin="0" end="10800" period="exp(0.12)" type="Normal" departLane="best" arrivalLane="random"/>
+    <flow id="flow2" from="AyE3bDm3uL.279.0062987000" to="HK3TRJVTf7.0.0000000000" begin="0" end="10800" period="exp(0.26)" type="Normal" departLane="best" arrivalLane="random"/>
+    <flow id="flow3" from="AyE3bDm3uL.279.0062987000" to="4xnhzLD_vP.143.8795332000" begin="0" end="10800" period="exp(0.05)" type="Normal" departLane="best" arrivalLane="random"/>
+    <flow id="flow4" from="-4xnhzLD_vP.0.0000000000" to="-AyE3bDm3uL.279.0062987000" begin="0" end="10800" period="exp(0.04)" type="Normal" departLane="best" arrivalLane="random"/>
+    <flow id="flow5" from="-4xnhzLD_vP.0.0000000000" to="-0KUyAFxYUW.75.5444242900" begin="0" end="10800" period="exp(0.06)" type="Normal" departLane="best" arrivalLane="random"/>
+    <flow id="flow6" from="-4xnhzLD_vP.0.0000000000" to="HK3TRJVTf7.0.0000000000" begin="0" end="10800" period="exp(0.02)" type="Normal" departLane="best" arrivalLane="random"/>
+    <flow id="flow7" from="-HK3TRJVTf7.0.0000000000" to="4xnhzLD_vP.0.0000000000" begin="0" end="10800" period="exp(0.1)" type="Normal" departLane="best" arrivalLane="random"/>
+    <flow id="flow8" from="-HK3TRJVTf7.0.0000000000" to="-AyE3bDm3uL.279.0062987000" begin="0" end="10800" period="exp(0.28)" type="Normal" departLane="best" arrivalLane="random"/>
+    <flow id="flow9" from="-HK3TRJVTf7.0.0000000000" to="-0KUyAFxYUW.75.5444242900" begin="0" end="10800" period="exp(0.04)" type="Normal" departLane="best" arrivalLane="random"/>
+    <flow id="flow10" from="0KUyAFxYUW.75.5444242900" to="HK3TRJVTf7.0.0000000000" begin="0" end="10800" period="exp(0.03)" type="Normal" departLane="best" arrivalLane="random"/>
+    <flow id="flow11" from="0KUyAFxYUW.75.5444242900" to="4xnhzLD_vP.0.0000000000" begin="0" end="10800" period="exp(0.07)" type="Normal" departLane="best" arrivalLane="random"/>
+    <flow id="flow12" from="0KUyAFxYUW.75.5444242900" to="-AyE3bDm3uL.279.0062987000" begin="0" end="10800" period="exp(0.02)" type="Normal" departLane="best" arrivalLane="random"/>
+</routes>
