@@ -127,7 +127,7 @@ class MessageTransfer:
 
     @classmethod
     def clear_residual_info(cls):
-        data_q =  cls.msg_queue_collections[DataMsg]
+        data_q = cls.msg_queue_collections[DataMsg]
         special_data_q = cls.msg_queue_collections[SpecialDataMsg]
         while not data_q.empty():
             data_q.get_nowait()
@@ -259,7 +259,8 @@ class PubClient:
             for single_msg in msg_label.raw_msg:
                 self.publish_single_msg(single_msg, msg_label.msg_type, msg_label.convert_method, fb_code, target_topic)
         else:
-            self.publish_single_msg(msg_label.raw_msg, msg_label.msg_type, msg_label.convert_method, fb_code, target_topic)
+            self.publish_single_msg(msg_label.raw_msg, msg_label.msg_type, msg_label.convert_method, fb_code,
+                                    target_topic)
 
     def publish_single_msg(self, raw_msg, msg_type: DetailMsgType, convert_method: str, fb_code, target_topic: str):
         """
@@ -281,8 +282,8 @@ class PubClient:
 
             success, _msg = fb_converter.json2fb(fb_code, _msg)
             if success != 0:
-                logger.warn(f'json2fb error occurs when sending message, '
-                            f'msg type: {msg_type}, error code: {success}, msg body: {raw_msg}')
+                logger.warning(f'json2fb error occurs when sending message, '
+                               f'msg type: {msg_type}, error code: {success}, msg body: {raw_msg}')
                 return None
         elif convert_method == 'json':
             _msg = json.dumps(raw_msg)

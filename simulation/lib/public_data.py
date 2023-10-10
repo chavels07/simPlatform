@@ -304,18 +304,18 @@ def create_TimeCountingDown(start_time: Num,
                             next_start_time: Num,
                             next_duration: Num):
     """支持int和float输入并做类型检查"""
-    start_time = int(start_time * 10)
-    min_end_time = int(min_end_time * 10)
-    max_end_time = int(max_end_time * 10)
+    start_time = round(start_time * 10)
+    min_end_time = round(min_end_time * 10)
+    max_end_time = round(max_end_time * 10)
     if min_end_time == 0:
         min_end_time = 1  # 避免为0时出现字段丢失
     if max_end_time == 0:
         max_end_time = 1
 
-    likely_end_time = int(likely_end_time * 10)
-    time_confidence = int(time_confidence * 10)
-    next_start_time = int(next_start_time * 10)
-    next_duration = int(next_duration * 10)
+    likely_end_time = round(likely_end_time * 10)
+    time_confidence = round(time_confidence * 10)
+    next_start_time = round(next_start_time * 10)
+    next_duration = round(next_duration * 10)
 
     _TimeCountingDown = {
         'startTime': start_time,
