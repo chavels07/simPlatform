@@ -2,9 +2,9 @@
 # @Time        : 2022/11/18 19:33
 # @File        : traffic.py
 # @Description : 交通流数据的存储，更新，读取
-
+import math
+from dataclasses import dataclass
 from typing import Tuple, Callable, Set, Dict, List, Iterable
-from warnings import warn
 
 import traci
 import traci.constants as tc
@@ -151,15 +151,24 @@ from simulation.information.participants import VehInfo
 #         """清除检测器的流量记录"""
 #         self.flow_counter.clear()
 
+@dataclass
+class AttachedLane:
+    first_lane_id: str
+    successive_lanes: List[str]
+    lane_stop_line_pos: Tuple[float, float]
+
 
 class FlowStopLine:
     _net = None
+    detection_radius = 0
 
     def __init__(self, node_id):
         self.node_id = node_id
         self.record_start_time = -1
         self.vehicle_cache: Dict[int, VehInfo] = {}
+        self.lane_sorted_vehicle_cache: Dict[str, List[VehInfo]] = {}
         self.lane_flow_counter: Dict[str, int] = self.initialize_counter()
+        self._successive_lane_attach()
 
     @classmethod
     def load_net(cls, net: sumolib.net.Net):
@@ -175,6 +184,41 @@ class FlowStopLine:
                 lane_flow_counter[lane_id] = 0
         return lane_flow_counter
 
+    def _successive_lane_attach(self):
+        successive_lanes = {}
+        for edge in self._net.getNode(self.node_id).getIncoming():
+            total_length = 0
+            edge: sumolib.net.edge.Edge
+            first_section_lanes: Dict[int, AttachedLane] = {}
+            lane_init_flag = False
+            valid_lane_index = set()
+            while total_length < self.detection_radius:
+                lanes = edge.getLanes()
+                total_lane = len(lanes)
+                this_section_valid_lane_index = set()
+                for lane in lanes:
+                    lane: sumolib.net.lane.Lane
+                    lane_id = lane.getID()
+                    right_index = lane.getIndex()  # right most from 0
+                    left_index = total_lane - right_index  # start from 1
+                    if not lane_init_flag:
+                        valid_lane_index.add(left_index)
+                        stop_line_pos = lane.getShape()[-1]
+                        first_section_lanes[left_index] = AttachedLane(lane_id, [], stop_line_pos)
+
+                    this_section_valid_lane_index.add(left_index)
+                    if left_index in valid_lane_index:
+                        first_section_lanes[left_index].successive_lanes.append(lane_id)
+                        self.lane_sorted_vehicle_cache[lane_id] = []
+                valid_lane_index = this_section_valid_lane_index.intersection(valid_lane_index)
+                lane_init_flag = True
+                total_length += edge.getLength()
+                edge = next(iter(edge.getIncoming().keys()))  # TODO: 到达上一交叉口
+            successive_lanes.update(
+                {attached_lane.first_lane_id: attached_lane for attached_lane in first_section_lanes.values()}
+            )
+        self.successive_lanes: Dict[str, AttachedLane] = successive_lanes
+
     def update_vehicle_cache(self, curr_vehicles: List[VehInfo]):
         if self.record_start_time < 0:
             self.record_start_time = SimStatus.sim_time_stamp
@@ -189,7 +233,14 @@ class FlowStopLine:
                 through_lane = last_step_veh_info.lane_id  # 增加counter
                 self.lane_flow_counter[through_lane] += 1
 
-        self.vehicle_cache = {veh.ptcId: veh for veh in curr_vehicles}
+        self.vehicle_cache = {}
+        for lane_cache in self.lane_sorted_vehicle_cache.values():
+            lane_cache.clear()
+
+        for veh in curr_vehicles:
+            self.vehicle_cache[veh.ptcId] = veh
+            if veh.edge_id and veh.lane_id in self.lane_sorted_vehicle_cache:
+                self.lane_sorted_vehicle_cache[veh.lane_id].append(veh)
 
     @staticmethod
     def enter_intersection(curr_status: VehInfo, last_status: VehInfo):
@@ -199,18 +250,45 @@ class FlowStopLine:
         else:
             return False
 
+    def get_queue_length(self) -> Dict[str, Tuple[int, float]]:
+        def _cal_pos(x1, y1, x2, y2):
+            return math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+
+        queue_res = {}
+        for first_lane_id, attached_lane in self.successive_lanes.items():
+            lane_queue_num, lane_queue_len = 0, 0
+            for lane_id in attached_lane.successive_lanes:
+                lane_cache = self.lane_sorted_vehicle_cache[lane_id]
+                lane_cache.sort(key=lambda x: _cal_pos(x.local_x, x.local_y, *attached_lane.lane_stop_line_pos))
+                for veh_info in lane_cache:
+                    if veh_info.speed > 0.5:
+                        break
+                    lane_queue_num += 1
+                    lane_queue_len = _cal_pos(veh_info.local_x, veh_info.local_y, *attached_lane.lane_stop_line_pos) \
+                                     + veh_info.length
+                else:
+                    continue  # 正常迭代完成
+
+                break
+            queue_res[first_lane_id] = (lane_queue_num, lane_queue_len)
+        return queue_res
+
     def get_traffic_flow(self):
         record_end_time = SimStatus.sim_time_stamp
         record_duration_sec = record_end_time - self.record_start_time
+        queue_res = self.get_queue_length()
 
         tf_stats = []
         for lane_id, flow in self.lane_flow_counter.items():
             flow_hour = flow / record_duration_sec * 3600
+            queue_num, queue_len = queue_res[lane_id]
             tf_stat = create_TrafficFlowStat(map_element=lane_id,
                                              ptc_type=1,
                                              veh_type="passenger_Vehicle_TypeUnknown",
                                              volume=flow_hour,
-                                             speed_area=0)
+                                             speed_area=0,
+                                             queue_length=queue_len,
+                                             stops=queue_num)
 
             tf_stats.append(tf_stat)
         stat_type = {'interval': int(record_duration_sec)}
@@ -233,3 +311,5 @@ class FlowStopLine:
         for lane_id in self.lane_flow_counter.keys():
             self.lane_flow_counter[lane_id] = 0
         self.vehicle_cache.clear()
+        for lane_cache in self.lane_sorted_vehicle_cache.values():
+            lane_cache.clear()

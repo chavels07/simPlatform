@@ -10,11 +10,11 @@ from typing import Optional, List
 
 # 与配置JSON文件中消息类型的名字对应
 CONFIG_MSG_NAME = {
-    'BSM': 'basic_safety_message',
-    'RSM': 'roadside_safety_message',
-    'SPAT': 'signal_phase_and_timing',
-    'TF': 'traffic_flow',
-    'SE': 'signal_execution'
+    'BSM': 'basicSafetyMessage',
+    'RSM': 'roadsideSafetyMessage',
+    'SPAT': 'signalPhaseAndTiming',
+    'TF': 'trafficFlow',
+    'SE': 'signalExecution'
 }
 
 
