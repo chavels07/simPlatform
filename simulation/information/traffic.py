@@ -288,7 +288,7 @@ class FlowStopLine:
                                              volume=flow_hour,
                                              speed_area=0,
                                              queue_length=queue_len,
-                                             stops=queue_num)
+                                             queue_vehicles=queue_num)
 
             tf_stats.append(tf_stat)
         stat_type = {'interval': int(record_duration_sec)}

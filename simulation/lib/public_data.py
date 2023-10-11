@@ -685,7 +685,7 @@ def create_TrafficFlowStat(map_element: str,
                            volume: Num,
                            speed_area: Num,
                            queue_length: Num,
-                           stops: Num):
+                           queue_vehicles: Num):
     _MapElement = {'ext_id': map_element}
     _TrafficFlowStat = {
         'map_element': _MapElement,
@@ -695,7 +695,7 @@ def create_TrafficFlowStat(map_element: str,
         'volume': int(volume * 100),
         'speed_area': int(speed_area * 100),
         'queue_length': int(queue_length * 10),
-        'stops': int(stops * 10)
+        'queued_vehicles': round(queue_vehicles)
     }  # TrafficFlow暂时只提供流量和区域速度数据
     return _TrafficFlowStat
 
