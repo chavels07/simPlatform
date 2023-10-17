@@ -19,8 +19,9 @@ simulation:
       name: signalPhaseAndTiming
       frequency: -1
     -
+      # minimum interval - 10s
       name: trafficFlow
-      frequency: -1
+      frequency: 15
     -
       name: signalExecution
       frequency: -1

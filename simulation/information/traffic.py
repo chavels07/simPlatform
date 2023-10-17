@@ -4,10 +4,8 @@
 # @Description : 交通流数据的存储，更新，读取
 import math
 from dataclasses import dataclass
-from typing import Tuple, Callable, Set, Dict, List, Iterable
+from typing import Tuple, Dict, List, Optional
 
-import traci
-import traci.constants as tc
 import sumolib
 
 from simulation.lib.public_data import (create_TrafficFlowStat, create_TrafficFlow, create_NodeReferenceID, SimStatus,
@@ -161,6 +159,7 @@ class AttachedLane:
 class FlowStopLine:
     _net = None
     detection_radius = 0
+    minimum_duration_required = 10
 
     def __init__(self, node_id):
         self.node_id = node_id
@@ -273,9 +272,12 @@ class FlowStopLine:
             queue_res[first_lane_id] = (lane_queue_num, lane_queue_len)
         return queue_res
 
-    def get_traffic_flow(self):
+    def get_traffic_flow(self) -> Optional[dict]:
         record_end_time = SimStatus.sim_time_stamp
         record_duration_sec = record_end_time - self.record_start_time
+        if record_duration_sec < self.minimum_duration_required:
+            return None
+
         queue_res = self.get_queue_length()
 
         tf_stats = []
@@ -302,8 +304,10 @@ class FlowStopLine:
         self.reset()  # 取出TrafficFlow数据后重置状态
         return traffic_flow
 
-    def create_traffic_flow_pub_msg(self) -> Tuple[bool, PubMsgLabel]:
+    def create_traffic_flow_pub_msg(self) -> Tuple[bool, Optional[PubMsgLabel]]:
         traffic_flow = self.get_traffic_flow()
+        if traffic_flow is None:
+            return False, None
         return True, PubMsgLabel(traffic_flow, DataMsg.TrafficFlow, convert_method='flatbuffers')
 
     def reset(self):
