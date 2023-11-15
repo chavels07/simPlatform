@@ -36,6 +36,11 @@ import sumolib
 import traci
 
 
+SIM_FLAG_FINISH = 0  # 仿真正常
+SIM_FLAG_ERROR = 1  # 仿真错误
+SIM_FLAG_TERMINATE = 2  # 外部中断命令
+
+
 @singleton
 class Simulation:
     """仿真平台系统
@@ -61,6 +66,7 @@ class Simulation:
         # 允许创建任务的函数返回一系列任务或单个任务，目的是为了保证不同类型的task creator函数只有单个
         # self.internal_task_creator: List[Callable[[], Union[Sequence[BaseTask], BaseTask]]] = []
         self.task_queue = TaskQueue()
+        self.terminate_func: Optional[Callable[[], bool]] = None
 
     def initialize_sumo(self,
                         sumo_cfg_fp: str,
@@ -117,7 +123,7 @@ class Simulation:
         self.storage.initialize_update_execute(trajectory_update=trajectory_feature,
                                                traffic_flow_update=traffic_flow_feature)
 
-    def run(self, connection: MQTTConnection):
+    def run(self, connection: MQTTConnection) -> int:
         """
         仿真运行
 
@@ -125,6 +131,7 @@ class Simulation:
             connection: 实现数据外部交互的MQTT通信接口
 
         Returns:
+            返回状态: 0: 正常, 1: 异常, 2: 外部中断命令
 
         Notes:
             每一仿真步需要依次处理的事项
@@ -134,6 +141,7 @@ class Simulation:
             4) 维护任务池执行当前步需完成的任务
         """
         self._reset()  # 预先清楚上一次仿真运行可能遗留的数据
+        ret_val = SIM_FLAG_FINISH
 
         logger.info('仿真开始')
         try:
@@ -157,12 +165,19 @@ class Simulation:
 
                 if self.sim_core.reach_limit():
                     break  # 完成仿真任务提前终止仿真程序
+
+                # 提前终止仿真
+                if self.terminate_func is not None and self.terminate_func():
+                    ret_val = SIM_FLAG_TERMINATE
+                    break
         except Exception:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             logger.error(''.join(traceback.format_exception(exc_type, exc_value, exc_traceback)))
+            ret_val = SIM_FLAG_ERROR
 
         logger.info('仿真结束')
         SimStatus.reset()  # 仿真状态信息重置
+        return ret_val
 
     def _reset(self):
         """运行仿真结束后重置仿真状态"""
@@ -528,10 +543,24 @@ class AlgorithmEval:
         # 注册任务生成函数
         self.sim.quick_register_task_creator_all()
 
-    def sim_task_start(self, connection: MQTTConnection, sim_task_name: str = 'default'):
+    def _detect_terminate_signal(self, connection: MQTTConnection):
+        recv_msgs = connection.loading_msg(OrderMsg)
+
+        for msg_type, msg_ in recv_msgs:
+            if msg_type is OrderMsg.Terminate:
+                if msg_['name'] == self.testing_name:
+                    return True
+        return False
+
+    def sim_task_start(self, connection: MQTTConnection, sim_task_name: str = 'default') -> int:
         """开始运行仿真任务"""
         emit_eval_event(EvalEventType.BEFORE_TASK, connection=connection)
-        self.sim.run(connection=connection)
+
+        # 注册退出函数
+        if self.sim.terminate_func is None:
+            self.sim.terminate_func = partial(self._detect_terminate_signal, connection=connection)
+
+        sim_ret_val = self.sim.run(connection=connection)
         emit_eval_event(EvalEventType.FINISH_TASK, sim_core=self.sim, eval_record=self.eval_record,
                         trajectories=self.sim.storage.trajectory_info, docker_name=self.testing_name)
 
@@ -539,6 +568,7 @@ class AlgorithmEval:
 
         self.eval_task_start(connection=connection, docker_name=self.testing_name, task_name=sim_task_name,
                              eval_record=self.eval_record)
+        return sim_ret_val
 
     def eval_task_start(*args, **kwargs):
         emit_eval_event(EvalEventType.START_EVAL, *args, **kwargs)
@@ -552,7 +582,7 @@ class AlgorithmEval:
         """从单个流量文件创建测评任务"""
         self._initialize_simulation(route_fp)
         self.sim.auto_activate_publish()
-        self.sim_task_start(connection)
+        sim_ret_val = self.sim_task_start(connection)
 
         emit_eval_event(EvalEventType.FINISH_ALL_TEST_BATCH,
                         docker_name=self.testing_name,
@@ -578,7 +608,11 @@ class AlgorithmEval:
         for index, route_fp in enumerate(route_fps, start=1):
             self._initialize_simulation(route_fp=route_fp)
             self.sim.auto_activate_publish()
-            self.sim_task_start(connection, sim_task_name=str(index))
+            sim_ret_val = self.sim_task_start(connection, sim_task_name=str(index))
+
+            # 提前终止仿真运行
+            if sim_ret_val == SIM_FLAG_TERMINATE:
+                break
 
         emit_eval_event(EvalEventType.FINISH_ALL_TEST_BATCH,
                         docker_name=self.testing_name,
