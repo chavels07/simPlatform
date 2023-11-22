@@ -2,7 +2,10 @@ preliminary:
   configFilePath: data/network/anting.sumocfg
   networkFilePath: data/network/yutanglu1207.net.xml
   routeFilePath: data/network/route/field_isolated
-  detectorFilePath: ~
+  detectorFilePath: data/network/detectors.add.xml
+  e1detectorOutputFilePath: data/network/e1detector_output.xml
+  e2detectorOutputFilePath: data/network/e2detector_output.xml
+  outputFilePath: data/statistics
   testName: Test
   arterialMode: true
   awaitStartCmd: false
