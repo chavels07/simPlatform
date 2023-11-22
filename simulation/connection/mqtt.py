@@ -28,6 +28,7 @@ MSG_TYPE_INFO = {
 
     # 自定义数据结构，通过json直接传递，None表示无需转换fb
     OrderMsg.Start: _MsgProperty('MECUpload/1/Start', None),  # 仿真开始
+    OrderMsg.Terminate: _MsgProperty('MECUpload/1/Terminate', None),  # 仿真中断
 
     SpecialDataMsg.TransitionSS: _MsgProperty('MECUpload/1/TransitionSignalScheme', None),  # 过渡周期信控方案
     SpecialDataMsg.SERequirement: _MsgProperty('MECUpload/1/SignalExecutionRequirement', None),  # 请求发送当前执行的信控方案
@@ -127,7 +128,7 @@ class MessageTransfer:
 
     @classmethod
     def clear_residual_info(cls):
-        data_q =  cls.msg_queue_collections[DataMsg]
+        data_q = cls.msg_queue_collections[DataMsg]
         special_data_q = cls.msg_queue_collections[SpecialDataMsg]
         while not data_q.empty():
             data_q.get_nowait()
@@ -259,7 +260,8 @@ class PubClient:
             for single_msg in msg_label.raw_msg:
                 self.publish_single_msg(single_msg, msg_label.msg_type, msg_label.convert_method, fb_code, target_topic)
         else:
-            self.publish_single_msg(msg_label.raw_msg, msg_label.msg_type, msg_label.convert_method, fb_code, target_topic)
+            self.publish_single_msg(msg_label.raw_msg, msg_label.msg_type, msg_label.convert_method, fb_code,
+                                    target_topic)
 
     def publish_single_msg(self, raw_msg, msg_type: DetailMsgType, convert_method: str, fb_code, target_topic: str):
         """
@@ -281,8 +283,8 @@ class PubClient:
 
             success, _msg = fb_converter.json2fb(fb_code, _msg)
             if success != 0:
-                logger.warn(f'json2fb error occurs when sending message, '
-                            f'msg type: {msg_type}, error code: {success}, msg body: {raw_msg}')
+                logger.warning(f'json2fb error occurs when sending message, '
+                               f'msg type: {msg_type}, error code: {success}, msg body: {raw_msg}')
                 return None
         elif convert_method == 'json':
             _msg = json.dumps(raw_msg)

@@ -124,7 +124,7 @@ class JunctionConns:
 
     def __init__(self):
         self.entries: Dict[Direction, Entry] = defaultdict(Entry)
-        self.movement_of_connection: Dict[int, int] = {}
+        self.movement_of_connection: Dict[int, int] = {}  # 从connection获得movement(phaseId)
 
     def __len__(self):
         connection_count = 0
@@ -160,6 +160,17 @@ class JunctionConns:
     def valid_sumo_MAP_movement_ext_id(self) -> List[str]:
         mov_collections = {str(mov) for mov in self.movement_of_connection.values()}
         return list(mov_collections)
+
+    def conn_state_str_filter_right(self, state: str, replace_char: str = ' ') -> str:
+        filter_state = []
+        for state_index, state_char in enumerate(state):
+            append_char = state_char if not self.movement_is_right(self.movement_of_connection[state_index]) else replace_char
+            filter_state.append(append_char)
+        return ''.join(filter_state)
+
+    @staticmethod
+    def movement_is_right(movement_id: int) -> bool:
+        return movement_id in (3, 7, 11, 15)
 
 
 def get_vector_angle_degree(x: float, y: float):
