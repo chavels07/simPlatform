@@ -24,6 +24,9 @@ class SetupConfig:
     network_file_path: str = None
     route_file_path: str = None
     detector_file_path: str = None
+    e1detector_output_file_path: str = None
+    e2detector_output_file_path: str = None
+    output_file_path: str = None
     test_name: str = None
     arterial_mode: bool = True
     await_start_cmd: bool = False
@@ -107,6 +110,11 @@ def load_config(cfg_path):
     SetupConfig.route_file_path = '/'.join((top_level_dir, setup_para['routeFilePath']))
     if setup_para['detectorFilePath']:
         SetupConfig.detector_file_path = '/'.join((top_level_dir, setup_para['detectorFilePath']))
+    if setup_para['e1detectorOutputFilePath']:
+        SetupConfig.e1detector_output_file_path = '/'.join((top_level_dir, setup_para['e1detectorOutputFilePath']))
+    if setup_para['e2detectorOutputFilePath']:
+        SetupConfig.e2detector_output_file_path = '/'.join((top_level_dir, setup_para['e2detectorOutputFilePath']))
+    SetupConfig.output_file_path = '/'.join((top_level_dir, setup_para['outputFilePath']))
     SetupConfig.test_name = setup_para.get('testName', 'No test name')
     SetupConfig.arterial_mode = setup_para.get('arterialMode', True)
     SetupConfig.await_start_cmd = setup_para.get('awaitStartCmd', False)

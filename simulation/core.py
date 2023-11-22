@@ -25,6 +25,8 @@ from simulation.lib.public_data import ImplementTask, InfoTask, BaseTask, SimSta
 from simulation.lib.sim_data import SimInfoStorage, ArterialSimInfoStorage
 from simulation.connection.mqtt import MQTTConnection
 
+from simulation.evaluation.data_process import get_stats
+
 # 校验环境变量中是否存在SUMO_HOME
 if 'SUMO_HOME' in os.environ:
     tools = os.path.join(os.environ['SUMO_HOME'], 'tools')
@@ -68,11 +70,13 @@ class Simulation:
         self.task_queue = TaskQueue()
         self.terminate_func: Optional[Callable[[], bool]] = None
 
-    def initialize_sumo(self,
+        def initialize_sumo(self,
                         sumo_cfg_fp: str,
                         network_fp: str,
                         route_fp: str,
                         detector_fp: str,
+                        general_output_fp: str,
+                        vehicle_output_fp: str,
                         sim_time_len: float,
                         sim_time_limit: Optional[int] = None,
                         warm_up_time: int = 0):
@@ -83,6 +87,8 @@ class Simulation:
             network_fp: 路网文件路径
             route_fp: 车辆路径文件路径
             detector_fp: 检测器文件路径
+            general_output_fp: statistics文件路径
+            vehicle_output_fp: tripinfo文件路径
             sim_time_len: 仿真单步时长
             sim_time_limit: 仿真时长限制
             warm_up_time: 预热时间
@@ -100,6 +106,10 @@ class Simulation:
             sumoCmd.extend(['-r', route_fp])
         if detector_fp is not None:
             sumoCmd.extend(['-a', detector_fp])
+        if general_output_fp is not None:
+            sumoCmd.extend(['--statistics-output', general_output_fp, '--duration-log.statistics', 'True'])
+        if vehicle_output_fp is not None:
+            sumoCmd.extend(['--tripinfo-output', vehicle_output_fp])
         if sim_time_len is not None:
             sumoCmd.extend(['--step-length', str(sim_time_len)])
         traci.start(sumoCmd)
@@ -516,6 +526,13 @@ class AlgorithmEval:
         self.eval_record: Dict[str, dict] = {}
         self.__eval_start_func: Optional[Callable] = None
 
+        # 生成存储sumo统计指标的文件夹
+        output_path = config.SetupConfig.output_file_path
+        current_output_number = len(os.listdir(output_path))
+        new_output_index = current_output_number + 1
+        os.mkdir(os.path.join(output_path, str(new_output_index)))
+        output_path = os.path.join(output_path, str(new_output_index))
+
         # 仿真运行开始方式
         self.mode_setting(config.SetupConfig.route_file_path,
                           config.SetupConfig.is_route_directory())
@@ -531,12 +548,14 @@ class AlgorithmEval:
                                         msg.name == config.CONFIG_MSG_NAME['TF'] for msg in
                                         config.SimulationConfig.pub_msgs))
 
-    def _initialize_simulation(self, route_fp: str):
+        def _initialize_simulation(self, route_fp: str, general_output_fp: str, vehicle_output_fp: str):
         """初始化仿真内容"""
         self.sim.initialize_sumo(sumo_cfg_fp=config.SetupConfig.config_file_path,
                                  network_fp=config.SetupConfig.network_file_path,
                                  route_fp=route_fp,
                                  detector_fp=config.SetupConfig.detector_file_path,
+                                 general_output_fp=general_output_fp,
+                                 vehicle_output_fp=vehicle_output_fp,
                                  sim_time_len=config.SimulationConfig.sim_time_step,
                                  sim_time_limit=config.SimulationConfig.sim_time_limit,
                                  warm_up_time=config.SimulationConfig.warm_up_time)
@@ -578,18 +597,32 @@ class AlgorithmEval:
     def auto_initialize_event():
         initialize_score_prepare()
 
-    def sim_task_single_scenario(self, connection: MQTTConnection, route_fp: str):
+    def sim_task_single_scenario(self, connection: MQTTConnection, route_fp: str, output_dir_fp: str,
+                                 e1detector_output_source_fp: str, e2detector_output_source_fp: str, run_index: int):
         """从单个流量文件创建测评任务"""
-        self._initialize_simulation(route_fp)
+        route_filename = route_fp.split('/')[-1]
+        sce_name = route_filename.split('.')[0]
+        general_output_filename = os.path.join(output_dir_fp, sce_name + '_statistics.xml')
+        vehicle_output_filename = os.path.join(output_dir_fp, sce_name + '_tripinfo.xml')
+        self._initialize_simulation(route_fp, general_output_filename, vehicle_output_filename)
         self.sim.auto_activate_publish()
+
         sim_ret_val = self.sim_task_start(connection)
+        e1detector_output_target_fp = os.path.join(output_dir_fp, sce_name + '_e1detectorinfo.xml')
+        os.rename(e1detector_output_source_fp, e1detector_output_target_fp)
+        e2detector_output_target_fp = os.path.join(output_dir_fp, sce_name + '_e2detectorinfo.xml')
+        os.rename(e2detector_output_source_fp, e2detector_output_target_fp)
+        
 
         emit_eval_event(EvalEventType.FINISH_ALL_TEST_BATCH,
                         docker_name=self.testing_name,
                         connection=connection,
                         eval_record=self.eval_record)
+        get_stats(run_index, [sce_name])
 
-    def sim_task_from_directory(self, connection: MQTTConnection, sce_dir_fp: str, *, f_name_startswith: str = None):
+    def sim_task_from_directory(self, connection: MQTTConnection, sce_dir_fp: str, *, f_name_startswith: str = None,
+                                output_dir_fp: str, e1detector_output_source_fp: str,
+                                e2detector_output_source_fp: str, run_index: int):
         """
         从文件夹中读取所有流量文件创建评测任务
 
@@ -597,16 +630,26 @@ class AlgorithmEval:
             connection: MQTT通信连接
             sce_dir_fp: route路径文件所在文件夹
             f_name_startswith: 指定route文件命名开头
+            output_dir_fp: 输出统计文件所在文件夹
+            e1detector_output_source_fp: e1检测器输出文件初始位置
+            e2detector_output_source_fp: e2检测器输出文件初始位置
+            run_index: 运行次数
 
         Returns:
 
         """
         route_fps = []
+        sce_name_list = []
         for file in os.listdir(sce_dir_fp):
             if f_name_startswith is None or file.startswith(f_name_startswith):
                 route_fps.append('/'.join((sce_dir_fp, file)))
-        for index, route_fp in enumerate(route_fps, start=1):
-            self._initialize_simulation(route_fp=route_fp)
+                sce_name = file.split('.')[0]
+                sce_name_list.append(sce_name)
+        for index, (route_fp, sce_name) in enumerate(zip(route_fps, sce_name_list), start=1):
+            general_output_fp = os.path.join(output_dir_fp, sce_name + '_statistics.xml')
+            vehicle_output_fp = os.path.join(output_dir_fp, sce_name + '_tripinfo.xml')
+            self._initialize_simulation(route_fp=route_fp, general_output_fp=general_output_fp,
+                                        vehicle_output_fp=vehicle_output_fp)
             self.sim.auto_activate_publish()
             sim_ret_val = self.sim_task_start(connection, sim_task_name=str(index))
 
@@ -614,26 +657,46 @@ class AlgorithmEval:
             if sim_ret_val == SIM_FLAG_TERMINATE:
                 break
 
+            # 每轮仿真结束 将检测器输出文件移动位置
+            e1detector_output_target_fp = os.path.join(output_dir_fp, sce_name + '_e1detectorinfo.xml')
+            os.rename(e1detector_output_source_fp, e1detector_output_target_fp)
+            e2detector_output_target_fp = os.path.join(output_dir_fp, sce_name + '_e2detectorinfo.xml')
+            os.rename(e2detector_output_source_fp, e2detector_output_target_fp)
+
+        # 进行评测
         emit_eval_event(EvalEventType.FINISH_ALL_TEST_BATCH,
                         docker_name=self.testing_name,
                         connection=connection,
                         eval_record=self.eval_record)
+        get_stats(run_index, sce_name_list)
 
-    def mode_setting(self, route_fp: str, multiple_file: bool) -> None:
+    def mode_setting(self, route_fp: str, multiple_file: bool, output_dir_fp: str,
+                     e1detector_output_source_fp: str, e2detector_output_source_fp: str, run_index: int) -> None:
         """
         调用loop_start前，指定测评时流量文件读取模式
 
         Args:
             route_fp: 路径文件/目录地址
             multiple_file: 是否为单个文件
+            output_dir_fp: 输出文件目录地址
+            e1detector_output_source_fp: e1检测器输出文件初始位置
+            e2detector_output_source_fp: e2检测器输出文件初始位置
 
         Returns:
 
         """
         if multiple_file:
-            self.__eval_start_func = partial(self.sim_task_from_directory, sce_dir_fp=route_fp)
+            self.__eval_start_func = partial(self.sim_task_from_directory, sce_dir_fp=route_fp,
+                                             output_dir_fp=output_dir_fp,
+                                             e1detector_output_source_fp=e1detector_output_source_fp,
+                                             e2detector_output_source_fp=e2detector_output_source_fp,
+                                             run_index=run_index)
         else:
-            self.__eval_start_func = partial(self.sim_task_single_scenario, route_fp=route_fp)
+            self.__eval_start_func = partial(self.sim_task_single_scenario, route_fp=route_fp,
+                                             output_dir_fp=output_dir_fp,
+                                             e1detector_output_source_fp=e1detector_output_source_fp,
+                                             e2detector_output_source_fp=e2detector_output_source_fp,
+                                             run_index=run_index)
 
     def loop_start(self, connection: MQTTConnection, *, test_name_split: str = ' '):
         """

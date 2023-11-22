@@ -10,6 +10,8 @@ tmp/
 !/data/evaluation/.gitkeep
 /data/trajectory/*
 !/data/trajectory/.gitkeep
+/data/statistics/*
+!/data/statistics/.gitkeep
 trajectories.out.xml
 e2*.xml
 *.exe
