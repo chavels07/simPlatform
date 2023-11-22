@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<routes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/routes_file.xsd">
+    <vType id="passenger" maxSpeed="13.89" vClass="passenger" laneChangeModel="LC2013" lcKeepRight="0"/>
+    <route id="ws" edges="genE568 genE528 genE523"/>
+    <route id="wl" edges="genE568 genE528 genE525"/>
+    <route id="wr" edges="genE568 genE528 genE521 genE1112"/>
+    <route id="es" edges="genE533 genE524 genE527"/>
+    <route id="el" edges="genE533 genE524 genE521 genE1112"/>
+    <route id="er" edges="genE533 genE524 genE525"/>
+    <route id="ns" edges="-107181 genE526 genE521 genE1112"/>
+    <route id="nl" edges="-107181 genE526 genE523"/>
+    <route id="nr" edges="-107181 genE526 genE527"/>
+    <route id="ss" edges="genE1111 genE522 genE525"/>
+    <route id="sl" edges="genE1111 genE522 genE527"/>
+    <route id="sr" edges="genE1111 genE522 genE523"/>
+    <flow id="flow1" period="exp(0.18)" route="ws" departSpeed="max" departLane="best"/>
+    <flow id="flow2" period="exp(0.04)" route="wl" departSpeed="max" departLane="best"/>
+    <flow id="flow3" period="exp(0.02)" route="wr" departSpeed="max" departLane="best"/>
+    <flow id="flow4" period="exp(0.2)" route="es" departSpeed="max" departLane="best"/>
+    <flow id="flow5" period="exp(0.03)" route="el" departSpeed="max" departLane="best"/>
+    <flow id="flow6" period="exp(0.03)" route="er" departSpeed="max" departLane="best"/>
+    <flow id="flow7" period="exp(0.1)" route="ns" departSpeed="max" departLane="best"/>
+    <flow id="flow8" period="exp(0.05)" route="nl" departSpeed="max" departLane="best"/>
+    <flow id="flow9" period="exp(0.02)" route="nr" departSpeed="max" departLane="best"/>
+    <flow id="flow10" period="exp(0.08)" route="ss" departSpeed="max" departLane="best"/>
+    <flow id="flow11" period="exp(0.04)" route="sl" departSpeed="max" departLane="best"/>
+    <flow id="flow12" period="exp(0.02)" route="sr" departSpeed="max" departLane="best"/>
+</routes>

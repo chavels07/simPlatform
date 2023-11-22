@@ -19,7 +19,8 @@ from simulation.application.vehicle_control import VehicleController
 
 # IntersectionId = NewType('IntersectionId', str)
 
-CONTROL_NODE_ID = 80
+CONTROL_NODE_ID = 920
+REGION_DETECTION_RADIUS = 150
 
 @dataclass
 class TransitionIntersection:
@@ -127,6 +128,7 @@ class SimInfoStorage:
 
     def initialize_traffic_flow(self, net: sumolib.net.Net, junction_list: Iterable[str] = None):
         FlowStopLine.load_net(net)
+        FlowStopLine.detection_radius = REGION_DETECTION_RADIUS
         self.flow_cons = self._initialize_storage_unit('tf', net, junction_list)
 
     def initialize_participant(self, net: sumolib.net.Net, junction_list: Iterable[str] = None):
@@ -165,7 +167,7 @@ class SimInfoStorage:
 
         if self.junction_veh_cons is not None:
             for jun_veh in self.junction_veh_cons.values():
-                jun_veh.subscribe_info(region_dis=150)
+                jun_veh.subscribe_info(region_dis=REGION_DETECTION_RADIUS)
 
     def create_signal_scheme_update_task(self,
                                          signal_scheme: dict,

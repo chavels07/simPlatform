@@ -304,18 +304,18 @@ def create_TimeCountingDown(start_time: Num,
                             next_start_time: Num,
                             next_duration: Num):
     """支持int和float输入并做类型检查"""
-    start_time = int(start_time * 10)
-    min_end_time = int(min_end_time * 10)
-    max_end_time = int(max_end_time * 10)
+    start_time = round(start_time * 10)
+    min_end_time = round(min_end_time * 10)
+    max_end_time = round(max_end_time * 10)
     if min_end_time == 0:
         min_end_time = 1  # 避免为0时出现字段丢失
     if max_end_time == 0:
         max_end_time = 1
 
-    likely_end_time = int(likely_end_time * 10)
-    time_confidence = int(time_confidence * 10)
-    next_start_time = int(next_start_time * 10)
-    next_duration = int(next_duration * 10)
+    likely_end_time = round(likely_end_time * 10)
+    time_confidence = round(time_confidence * 10)
+    next_start_time = round(next_start_time * 10)
+    next_duration = round(next_duration * 10)
 
     _TimeCountingDown = {
         'startTime': start_time,
@@ -683,8 +683,9 @@ def create_TrafficFlowStat(map_element: str,
                            ptc_type: int,
                            veh_type: str,
                            volume: Num,
-                           speed_area: Num):
-    speed_area = int(speed_area * 100)
+                           speed_area: Num,
+                           queue_length: Num,
+                           queue_vehicles: Num):
     _MapElement = {'ext_id': map_element}
     _TrafficFlowStat = {
         'map_element': _MapElement,
@@ -692,7 +693,9 @@ def create_TrafficFlowStat(map_element: str,
         'ptc_type': ptc_type,
         'veh_type': veh_type,
         'volume': int(volume * 100),
-        'speed_area': int(speed_area * 100)
+        'speed_area': int(speed_area * 100),
+        'queue_length': int(queue_length * 10),
+        'queued_vehicles': round(queue_vehicles)
     }  # TrafficFlow暂时只提供流量和区域速度数据
     return _TrafficFlowStat
 
@@ -767,7 +770,9 @@ def signalized_intersection_name_decimal(ints: str) -> int:
     elif ints.startswith('-'):
         ints_num = MINUS_NUMERIC_PAT.match(ints).group(1)
     else:
-        raise ValueError(f'unexpected intersection name: {ints}')
+        if not ints.isnumeric():
+            raise ValueError(f'unexpected intersection name: {ints}')
+        ints_num = ints
     return int(ints_num)
     # return 10  # Temporary
 

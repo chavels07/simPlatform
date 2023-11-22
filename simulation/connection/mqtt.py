@@ -28,6 +28,7 @@ MSG_TYPE_INFO = {
 
     # 自定义数据结构，通过json直接传递，None表示无需转换fb
     OrderMsg.Start: _MsgProperty('MECUpload/1/Start', None),  # 仿真开始
+    OrderMsg.Terminate: _MsgProperty('MECUpload/1/Terminate', None),  # 仿真中断
 
     SpecialDataMsg.TransitionSS: _MsgProperty('MECUpload/1/TransitionSignalScheme', None),  # 过渡周期信控方案
     SpecialDataMsg.SERequirement: _MsgProperty('MECUpload/1/SignalExecutionRequirement', None),  # 请求发送当前执行的信控方案
@@ -73,9 +74,12 @@ class MQTTConnection:
             topics: 需要订阅的一系列主题，若为空则订阅所有可用MSG_TYPE中的主题
         """
         self.__sub_thread = SubClientThread(broker, port, topics)
-        self.__pub_client = PubClient(broker, port)
+        self.__pub_client = PubClient(broker, port, self.__sub_thread.client)
         self.__sub_thread.start()
         self.state = True
+
+    def clear_residual_data(self):
+        self.__msg_transfer.clear_residual_info()
 
 
 class MessageTransfer:
@@ -122,6 +126,16 @@ class MessageTransfer:
         while not _pop_queue.empty():
             yield _pop_queue.get_nowait()
 
+    @classmethod
+    def clear_residual_info(cls):
+        data_q = cls.msg_queue_collections[DataMsg]
+        special_data_q = cls.msg_queue_collections[SpecialDataMsg]
+        while not data_q.empty():
+            data_q.get_nowait()
+
+        while not special_data_q.empty():
+            special_data_q.get_nowait()
+
 
 # 选取下发的topic进行订阅，通过topic名称筛选出需要订阅的topic
 VALID_TOPIC = {item.topic_name: (short_name, item.fb_code) for short_name, item in MSG_TYPE_INFO.items() if
@@ -166,7 +180,7 @@ def on_disconnect(client, userdata, rc):
             client.reconnect()
             logger.info('Reconnect successfully')
         except Exception as e:
-            logger.warn('Reconnection failed, data publish stopped')
+            logger.error('Reconnection failed, data publish stopped')
 
 
 class SubClientThread(threading.Thread):
@@ -195,12 +209,13 @@ class SubClientThread(threading.Thread):
     def connect_sub_mqtt(self):
         """通过MQTT协议创建连接，阻塞形式"""
         client_id = f'sub-{random.randint(0, 1000)}'
-        client = Client(client_id)
+        client = Client(client_id, clean_session=False)
         client.on_connect = on_connect
         client.on_message = on_message
+        client.disconnect = on_disconnect
 
         client.connect(self.broker, self.port)
-        client.subscribe(topic=self.topics)
+        client.subscribe(topic=self.topics, qos=1)
         client.loop_forever()
         self.client = client
 
@@ -210,8 +225,11 @@ class PubClient:
     发布消息的客服端, 推送的消息需要封装成PubMsgLabel的形式传入
     """
 
-    def __init__(self, broker, port):
-        self.client = self.__connect_pub_mqtt(broker, port)
+    def __init__(self, broker, port, sub_client: Client = None):
+        if sub_client is None:
+            self.client = self.__connect_pub_mqtt(broker, port)
+        else:
+            self.client = sub_client
 
     @staticmethod
     def __connect_pub_mqtt(broker, port):
@@ -219,14 +237,21 @@ class PubClient:
         client_id = f'pub-{random.randint(0, 1000)}'
         client = Client(client_id)
         client.on_connect = on_connect
+        client.disconnect = on_disconnect
+        client.reconnect_delay_set()
         client.connect(broker, port)
         return client
 
     def _publish(self, topic: str, msg: str):
         """通过客户端发布单条消息"""
         msg_info = self.client.publish(topic, msg)
+        if msg_info.rc == 0:
+            return
+        logger.info(f'fail to send message to topic {topic}, return code: {msg_info.rc}')
+        self.client.reconnect()
+        msg_info = self.client.publish(topic, msg)
         if msg_info.rc != 0:
-            logger.info(f'fail to send message to topic {topic}, return code: {msg_info.rc}')
+            raise RuntimeError('Cannot reconnect')
 
     def publish(self, msg_label: PubMsgLabel):
         """根据推送消息标记发布单条或多条消息"""
@@ -235,7 +260,8 @@ class PubClient:
             for single_msg in msg_label.raw_msg:
                 self.publish_single_msg(single_msg, msg_label.msg_type, msg_label.convert_method, fb_code, target_topic)
         else:
-            self.publish_single_msg(msg_label.raw_msg, msg_label.msg_type, msg_label.convert_method, fb_code, target_topic)
+            self.publish_single_msg(msg_label.raw_msg, msg_label.msg_type, msg_label.convert_method, fb_code,
+                                    target_topic)
 
     def publish_single_msg(self, raw_msg, msg_type: DetailMsgType, convert_method: str, fb_code, target_topic: str):
         """
@@ -257,8 +283,8 @@ class PubClient:
 
             success, _msg = fb_converter.json2fb(fb_code, _msg)
             if success != 0:
-                logger.warn(f'json2fb error occurs when sending message, '
-                            f'msg type: {msg_type}, error code: {success}, msg body: {raw_msg}')
+                logger.warning(f'json2fb error occurs when sending message, '
+                               f'msg type: {msg_type}, error code: {success}, msg body: {raw_msg}')
                 return None
         elif convert_method == 'json':
             _msg = json.dumps(raw_msg)

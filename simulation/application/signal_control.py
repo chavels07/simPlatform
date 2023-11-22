@@ -27,6 +27,7 @@ class TLStatus(Enum):
     RED = 'r'
     YELLOW = 'y'
     GREEN = 'g'
+    UNKNOWN = 'u'
 
     def lower_name(self):
         return self.name.lower()
@@ -102,7 +103,7 @@ def get_tl_status(state: str) -> TLStatus:
 
 def get_related_movement_from_state(state: str) -> List[int]:
     """根据sumo中相位的信号状态判断相位对应控制的流向"""
-    return [i for i, light in enumerate(state) if light.lower() != 'r']
+    return [i for i, light in enumerate(state) if light.lower() != 'r' and light.isalpha()]
 
 
 def get_phase_status(state: str) -> TLStatus:
@@ -278,75 +279,85 @@ class SignalController:
                                                   phases=phases)
         return signal_execution
 
-    def get_phases_time_countdown(self) -> Tuple[List[dict], List[int]]:
+    def get_phases_time_countdown(self) -> Tuple[List[dict], List[int], List[int]]:
         """
-        获取交叉口所有相位的时间倒计时
+        获取交叉口所有相位的时间倒计时, 原则上要求每个movement在一个signalPlan中只能放行一次
         Returns: 1) 各相位time countdown 结构数据 2) 各相位信号灯状态对应的枚举值，参考数据结构中的LightState
 
         """
         subscribe_info = self.get_subscribe_info()
         curr_logic = self.get_current_logic()
-        local_phases: List[traci.trafficlight.Phase] = curr_logic.getPhases()  # TODO: check index从0还是还是1开始
+        local_phases: List[traci.trafficlight.Phase] = curr_logic.getPhases()
+        phase_num = len(local_phases)
         current_phase_index = subscribe_info[tc.TL_CURRENT_PHASE]
-        next_switch_time = subscribe_info[tc.TL_NEXT_SWITCH]  # absolute simulation time
+        next_switch_time = subscribe_info[tc.TL_NEXT_SWITCH] - SimStatus.sim_time_stamp  # absolute simulation time
         cycle_length = sum(phase.duration for phase in local_phases)
 
-        timing, lights = [], []
-        yellow_insert_index = None  # 灯色为黄灯单独修改灯色
+        timing, lights, movements = [], [], []
         for phase_index, phase in enumerate(local_phases):
-            status = get_phase_status(phase.state)
-            if status is not TLStatus.GREEN:
-                if phase_index == current_phase_index and status is TLStatus.YELLOW:
-                    # 处理绿灯不是第一个周期的情况，插入index为-1时修改lights最后一位，对应最后一个相位
-                    yellow_insert_index = len(lights) - 1
+            ignore_right_state = self.conn_info.conn_state_str_filter_right(phase.state)
+            status = get_phase_status(ignore_right_state)
+            # 全红相位不对应信号灯组
+            if status is TLStatus.RED:
                 continue
 
             # 当前为绿灯周期
             if phase_index == current_phase_index:
                 start_time = 0
-                likely_end_time = next_switch_time - SimStatus.sim_time_stamp
+                likely_end_time = next_switch_time
                 next_start_time = cycle_length - (phase.duration - likely_end_time)
-                light_state_val = 6  # protected movement allowed(green)
+                # # 加上下一个相位黄灯
+                # likely_end_time += local_phases[(phase_index + 1) % phase_num].duration
             elif phase_index > current_phase_index:
-                # assert phase_index - current_phase_index > 1
                 start_time = sum(local_phases[_index].duration for _index in
                                  range(current_phase_index + 1, phase_index)) + next_switch_time
                 likely_end_time = start_time + phase.duration
                 next_start_time = start_time + cycle_length
-                light_state_val = 3  # stopAndRemain(red)
             else:
-                # assert current_phase_index - phase_index > 1
                 start_time = cycle_length - (sum(local_phases[_index].duration
                                                  for _index in range(phase_index, current_phase_index))
-                                             + phase.duration - next_switch_time)
+                                             + local_phases[current_phase_index].duration - next_switch_time)
                 likely_end_time = start_time + phase.duration
                 next_start_time = start_time + cycle_length
-                light_state_val = 3
 
-            delta_min = phase.minDur - phase.duration
-            delta_max = phase.maxDur - phase.duration
-            min_end_time = likely_end_time + delta_min
-            max_end_time = likely_end_time + delta_max
+            # 接收的signalScheme不提供max/min duration, 无法从sumo中直接提取
+            # delta_min = phase.minDur - phase.duration
+            # delta_max = phase.maxDur - phase.duration
+            min_end_time = likely_end_time  # + delta_min
+            max_end_time = likely_end_time  # + delta_max
             next_duration = phase.duration  # 假设信控方案不变化
 
-            lights.append(light_state_val)
-            timing.append(create_TimeCountingDown(start_time=start_time,
-                                                  min_end_time=min_end_time,
-                                                  max_end_time=max_end_time,
-                                                  likely_end_time=likely_end_time,
-                                                  time_confidence=0,
-                                                  next_start_time=next_start_time,
-                                                  next_duration=next_duration))
-        if yellow_insert_index is not None:
-            lights[yellow_insert_index] = 7  # intersectionClearance(yellow)
-        return timing, lights
+            # protected movement allowed(green) / intersectionClearance(yellow)
+            light_state_val = 6 if status is TLStatus.GREEN else 7
+            related_conn_indexes = get_related_movement_from_state(ignore_right_state)
+            countdown_info = create_TimeCountingDown(start_time=start_time,
+                                                     min_end_time=min_end_time,
+                                                     max_end_time=max_end_time,
+                                                     likely_end_time=likely_end_time,
+                                                     time_confidence=0,
+                                                     next_start_time=next_start_time,
+                                                     next_duration=next_duration)
+            movement_record = set()
+            for conn_index in related_conn_indexes:
+                movement_index = self.conn_info.movement_of_connection[conn_index]
+                if movement_index in movement_record:
+                    continue
+                movement_record.add(movement_index)
+
+                # if movement_index in movements:
+                #     # TODO: 重复出现同一相位应当重新计算开始时间
+                #     logger.warning('Duplicate movements occur in signal plan, SPAT result may be incorrect')
+                movements.append(movement_index)
+                lights.append(light_state_val)
+                timing.append(countdown_info)
+        return timing, lights, movements
 
     def get_current_spat(self) -> dict:
         """获取当前交叉口的SPAT消息"""
-        timings, lights = self.get_phases_time_countdown()
+        timings, lights, movements = self.get_phases_time_countdown()
         phase_states = [create_PhaseState(light=light, timing=time_countdown) for time_countdown, light in
                         zip(timings, lights)]
-        phases = [create_Phase(phase_id=index, phase_states=[item]) for index, item in enumerate(phase_states, start=1)]
+        phases = [create_Phase(phase_id=phase_id, phase_states=[item]) for item, phase_id in zip(phase_states, movements)]
 
         node_id = create_NodeReferenceID(signalized_intersection_name_decimal(self.ints_id))
         intersection_status_object = {'status': 5}  # fix timing
@@ -511,7 +522,8 @@ class SignalController:
         for phase in phases:
             try:
                 PhasicValidator.model_validate(
-                    phase, context={'valid_movements': sorted(self.conn_info.valid_sumo_MAP_movement_ext_id(), key=lambda x: int(x))}
+                    phase, context={'valid_movements': sorted(self.conn_info.valid_sumo_MAP_movement_ext_id(),
+                                                              key=lambda x: int(x))}
                 )
             except ValidationError as exc:
                 exc_info = exc.errors()[0]
@@ -532,7 +544,6 @@ class SignalController:
                     logger.user_info(f'Movement {movement} not in junction {self.ints_id}')
                     continue
                 connection_indexes.extend(conn_res)
-            print(connection_indexes)
 
             # connection和TLS的编号规则有差异，前者是从1开始后者从0开始
             green_state = ''.join(

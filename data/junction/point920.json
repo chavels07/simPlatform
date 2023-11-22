@@ -1,0 +1,168 @@
+{
+    "id": "49529",
+    "name": "31011410002",
+    "capacity": 7823,
+    "position": {
+      "lat": 312972317,
+      "lon": 1211867706
+    },
+    "link": [
+      {
+        "id": "-HK3TRJVTf7.294.0683777000",
+        "isEntry": 1,
+        "length": 20.04,
+        "speed": 13.89
+      },
+      {
+        "id": "-HK3TRJVTf7.283.2184508630",
+        "isEntry": 1,
+        "length": 5.35,
+        "speed": 13.89
+      },
+      {
+        "id": "-HK3TRJVTf7.235.8897217000",
+        "isEntry": 1,
+        "length": 39.32,
+        "speed": 13.89
+      },
+      {
+        "id": "0KUyAFxYUW.0.0000000000",
+        "isEntry": 1,
+        "length": 81.40,
+        "speed": 13.89
+      },
+      {
+        "id": "AyE3bDm3uL.0.0000000000",
+        "isEntry": 1,
+        "length": 20.50,
+        "speed": 13.89
+      },
+      {
+        "id": "AyE3bDm3uL.11.9898415400",
+        "isEntry": 1,
+        "length": 108.82,
+        "speed": 13.89
+      },
+      {
+        "id": "-4xnhzLD_vP.143.8795332000",
+        "isEntry": 1,
+        "length": 62.30,
+        "speed": 13.89
+      },
+      {
+        "id": "0KUyAFxYUW.75.5444242900",
+        "isEntry": 1,
+        "length": 53.66,
+        "speed": 13.89
+      },
+      {
+        "id": "-HK3TRJVTf7.221.5010418000",
+        "isEntry": 1,
+        "length": 6.23,
+        "speed": 13.89
+      },
+      {
+        "id": "-HK3TRJVTf7.201.9952050959",
+        "isEntry": 1,
+        "length": 11.72,
+        "speed": 13.89
+      },
+      {
+        "id": "-4xnhzLD_vP.91.5608633800",
+        "isEntry": 1,
+        "length": 44.07,
+        "speed": 13.89
+      },
+      {
+        "id": "-4xnhzLD_vP.0.0000000000",
+        "isEntry": 1,
+        "length": 18.57,
+        "speed": 13.89
+      },
+      {
+        "id": "-HK3TRJVTf7.161.2301276455",
+        "isEntry": 0,
+        "length": 16.42,
+        "speed": 16.42
+      },
+      {
+        "id": "HK3TRJVTf7.294.0683777000",
+        "isEntry": 0,
+        "length": 20.04,
+        "speed": 13.89
+      },
+      {
+        "id": "HK3TRJVTf7.283.2184508630",
+        "isEntry": 0,
+        "length": 5.35,
+        "speed": 13.89
+      },
+      {
+        "id": "HK3TRJVTf7.235.8897217000",
+        "isEntry": 0,
+        "length": 39.32,
+        "speed": 13.89
+      },
+      {
+        "id": "-0KUyAFxYUW.0.0000000000",
+        "isEntry": 0,
+        "length": 81.40,
+        "speed": 13.89
+      },
+      {
+        "id": "-0KUyAFxYUW.75.5444242900",
+        "isEntry": 0,
+        "length": 53.66,
+        "speed": 13.89
+      },
+      {
+        "id": "4xnhzLD_vP.143.8795332000",
+        "isEntry": 0,
+        "length": 62.30,
+        "speed": 13.89
+      },
+      {
+        "id": "-AyE3bDm3uL.0.0000000000",
+        "isEntry": 0,
+        "length": 20.50,
+        "speed": 13.89
+      },
+      {
+        "id": "-AyE3bDm3uL.11.9898415400",
+        "isEntry": 0,
+        "length": 108.82,
+        "speed": 13.89
+      },
+      {
+        "id": "HK3TRJVTf7.221.5010418000",
+        "isEntry": 0,
+        "length": 6.23,
+        "speed": 13.89
+      },
+      {
+        "id": "HK3TRJVTf7.201.9952050959",
+        "isEntry": 0,
+        "length": 11.72,
+        "speed": 13.89
+      },
+      {
+        "id": "HK3TRJVTf7.161.2301276455",
+        "isEntry": 0,
+        "length": 16.42,
+        "speed": 16.42
+      },
+      {
+        "id": "4xnhzLD_vP.91.5608633800",
+        "isEntry": 0,
+        "length": 44.07,
+        "speed": 13.89
+      },
+      {
+        "id": "4xnhzLD_vP.0.0000000000",
+        "isEntry": 0,
+        "length": 18.57,
+        "speed": 13.89
+      }
+    ],
+    "control_strategy": 1
+  }

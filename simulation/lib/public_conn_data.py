@@ -15,6 +15,7 @@ class OrderMsg(MsgType):
     # 控制命令
     Start = auto()
     ScoreReport = auto()
+    Terminate = auto()
 
 
 class DataMsg(MsgType):

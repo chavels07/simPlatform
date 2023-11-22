@@ -12,7 +12,7 @@ from simulation.connection.python_fbconv.fbconv import FBConverter
 client = Client()
 client.connect('121.36.231.253', 1883)
 
-send_cmd = {"docker": "Algorithm test1"}
+send_cmd = {"docker": "algo/test-v0.0.0|"}
 send_cmd = json.dumps(send_cmd)
 client.publish('MECUpload/1/Start', send_cmd)
 

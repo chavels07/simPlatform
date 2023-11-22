@@ -280,7 +280,7 @@ class JunctionVehContainer:
             local_x, local_y = sub_veh_info[tc.VAR_POSITION]
             lon, lat = self._net.convertXY2LonLat(local_x, local_y)
 
-            edge_id = '' if 'point' in sub_veh_info[tc.VAR_ROAD_ID] or 'J' in sub_veh_info[tc.VAR_ROAD_ID] \
+            edge_id = '' if 'point' in sub_veh_info[tc.VAR_ROAD_ID] or sub_veh_info[tc.VAR_ROAD_ID].startswith('J') \
                 else sub_veh_info[tc.VAR_ROAD_ID]  # 交叉口内部的edge_id为空
 
             veh_info = VehInfo(ptcId=veh_id_num,
@@ -310,6 +310,7 @@ class JunctionVehContainer:
                 edge_id = ''
             elif edge_id.endswith(string.digits) and edge_id[-2] == '_':
                 continue  # 除了交叉口外其他junction连接段不保存数据
+            edge_id = edge_id.rsplit('_', 1)[0]
             trajectories[str(veh_info.ptcId)] = create_trajectory(ptcId=veh_info.ptcId,
                                                                   lat=veh_info.lat,
                                                                   lon=veh_info.lon,
