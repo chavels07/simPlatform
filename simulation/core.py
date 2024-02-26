@@ -535,7 +535,11 @@ class AlgorithmEval:
 
         # 仿真运行开始方式
         self.mode_setting(config.SetupConfig.route_file_path,
-                          config.SetupConfig.is_route_directory())
+                          config.SetupConfig.is_route_directory(),
+                          output_path,
+                          config.SetupConfig.e1detector_output_file_path,
+                          config.SetupConfig.e2detector_output_file_path,
+                          new_output_index)
 
         # 注册仿真各环节触发的事件
         self.auto_initialize_event()

@@ -102,7 +102,7 @@ def load_config(cfg_path):
     with open(cfg_path, 'r') as f:
         cfg = yaml.safe_load(f)
     # 仿真启动前预先设置的参数
-    top_level_dir = os.path.abspath('..')  # 获取项目绝对路径
+    top_level_dir = os.path.abspath('.')  # 获取项目绝对路径
     top_level_dir = top_level_dir.replace('\\', '/')
     setup_para = cfg['preliminary']
     SetupConfig.config_file_path = '/'.join((top_level_dir, setup_para['configFilePath']))
