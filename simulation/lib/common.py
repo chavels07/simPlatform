@@ -8,6 +8,7 @@ import logging
 import time
 from inspect import signature
 from functools import wraps
+from pathlib import Path
 from typing import Union
 
 # '%(asctime)s.%(msecs)03d [%(levelname)s] [%(filename)s:%(lineno)d] %(message)s'
@@ -23,7 +24,10 @@ logger_handler.setFormatter(formatter)
 raw_logger.addHandler(logger_handler)
 
 project_directory_path = os.path.dirname(os.getcwd())
-file_handler = logging.FileHandler(os.path.join(project_directory_path, 'logs', 'run.log'), encoding='utf-8')
+log_file_path = Path(project_directory_path) / 'logs'
+if not log_file_path.exists():
+    log_file_path.mkdir()
+file_handler = logging.FileHandler(str(log_file_path / 'run.log'), encoding='utf-8')
 file_handler.setLevel(logging.ERROR)
 file_handler.setFormatter(formatter)
 raw_logger.addHandler(file_handler)

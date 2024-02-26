@@ -3,6 +3,10 @@
 # @File        : main.py
 # @Description : 仿真运行主程序
 
+import sys
+from pathlib import Path
+sys.path.extend(str(Path(__file__).parent.parent))
+
 from simulation.connection.mqtt import MQTTConnection
 from simulation.core import Simulation, AlgorithmEval
 from simulation.lib.config import load_config, SetupConfig, ConnectionConfig
