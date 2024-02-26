@@ -70,7 +70,7 @@ class Simulation:
         self.task_queue = TaskQueue()
         self.terminate_func: Optional[Callable[[], bool]] = None
 
-        def initialize_sumo(self,
+    def initialize_sumo(self,
                         sumo_cfg_fp: str,
                         network_fp: str,
                         route_fp: str,
@@ -548,7 +548,7 @@ class AlgorithmEval:
                                         msg.name == config.CONFIG_MSG_NAME['TF'] for msg in
                                         config.SimulationConfig.pub_msgs))
 
-        def _initialize_simulation(self, route_fp: str, general_output_fp: str, vehicle_output_fp: str):
+    def _initialize_simulation(self, route_fp: str, general_output_fp: str, vehicle_output_fp: str):
         """初始化仿真内容"""
         self.sim.initialize_sumo(sumo_cfg_fp=config.SetupConfig.config_file_path,
                                  network_fp=config.SetupConfig.network_file_path,
