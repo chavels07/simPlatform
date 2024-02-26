@@ -12,7 +12,7 @@ from simulation.core import Simulation, AlgorithmEval
 from simulation.lib.config import load_config, SetupConfig, ConnectionConfig
 
 if __name__ == '__main__':
-    load_config('../setting.yaml')
+    load_config(str(Path(__file__).parent.parent / 'setting.yaml'))
     connection = MQTTConnection()
     connection.connect(ConnectionConfig.broker, ConnectionConfig.port, None)
 
