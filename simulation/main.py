@@ -5,7 +5,7 @@
 
 import sys
 from pathlib import Path
-sys.path.extend(str(Path(__file__).parent.parent))
+sys.path.append(str(Path(__file__).parent.parent))
 
 from simulation.connection.mqtt import MQTTConnection
 from simulation.core import Simulation, AlgorithmEval
